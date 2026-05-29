@@ -23,9 +23,7 @@ export async function getVoucher(code: string) {
 export async function markVoucherUsed(code: string) {
   const voucher = await getVoucher(code);
 
-  if (!voucher) {
-    return null;
-  }
+  if (!voucher) return null;
 
   const updatedVoucher: VoucherData = {
     ...voucher,
@@ -36,4 +34,26 @@ export async function markVoucherUsed(code: string) {
   await saveVoucher(updatedVoucher);
 
   return updatedVoucher;
+}
+
+export async function getVoucherStats() {
+  const keys = await redis.keys("voucher:*");
+
+  let active = 0;
+  let used = 0;
+
+  for (const key of keys) {
+    const voucher = await redis.get<VoucherData>(key);
+
+    if (!voucher) continue;
+
+    if (voucher.status === "ACTIVE") active++;
+    if (voucher.status === "USED") used++;
+  }
+
+  return {
+    active,
+    used,
+    total: active + used,
+  };
 }
