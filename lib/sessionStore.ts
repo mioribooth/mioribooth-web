@@ -1,3 +1,5 @@
+import { Redis } from "@upstash/redis";
+
 export type BoothSession = {
   sessionId: string;
   framePhoto?: string;
@@ -7,7 +9,10 @@ export type BoothSession = {
   createdAt: string;
 };
 
-export const sessions = new Map<string, BoothSession>();
+export const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
 export function createSessionId() {
   const date = new Date();

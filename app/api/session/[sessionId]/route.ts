@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sessions } from "@/lib/sessionStore";
+import { redis, type BoothSession } from "@/lib/sessionStore";
 
 type Params = {
   params: Promise<{
@@ -10,7 +10,7 @@ type Params = {
 export async function GET(_request: Request, context: Params) {
   const { sessionId } = await context.params;
 
-  const session = sessions.get(sessionId);
+  const session = await redis.get<BoothSession>(`session:${sessionId}`);
 
   if (!session) {
     return NextResponse.json(

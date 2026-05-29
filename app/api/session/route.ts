@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { createSessionId, sessions, type BoothSession } from "@/lib/sessionStore";
+import {
+  createSessionId,
+  redis,
+  type BoothSession,
+} from "@/lib/sessionStore";
 
 export async function POST(request: Request) {
   try {
@@ -16,10 +20,13 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    sessions.set(sessionId, newSession);
+    await redis.set(`session:${sessionId}`, newSession, {
+      ex: 60 * 60 * 24 * 30,
+    });
 
     const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "https://mioribooth-web.vercel.app";
 
     return NextResponse.json({
       success: true,
@@ -42,7 +49,6 @@ export async function POST(request: Request) {
 export async function GET() {
   return NextResponse.json({
     success: true,
-    total: sessions.size,
-    sessions: Array.from(sessions.values()),
+    message: "Session API aktif memakai Upstash Redis",
   });
 }
