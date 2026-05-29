@@ -10,9 +10,13 @@ type Voucher = {
   quota: number;
   used: number;
   price: number;
+  extraPrint: number;
   isActive: boolean;
   createdAt: string;
 };
+
+const PACKAGE_PRICE = 25000;
+const EXTRA_PRINT_PRICE = 5000;
 
 function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -22,29 +26,31 @@ function formatRupiah(value: number) {
   }).format(value || 0);
 }
 
+function calculatePrice(extraPrint: number) {
+  return PACKAGE_PRICE + extraPrint * EXTRA_PRINT_PRICE;
+}
+
 export default function AdminVouchersPage() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const [form, setForm] = useState({
-    code: "",
-    name: "",
     packageName: "Photo Strip",
     quota: 1,
-    price: 35000,
+    extraPrint: 0,
+    price: 25000,
   });
 
   const stats = useMemo(() => {
-    const total = vouchers.length;
-    const active = vouchers.filter((v) => v.isActive).length;
-    const used = vouchers.reduce((sum, v) => sum + v.used, 0);
-    const quota = vouchers.reduce((sum, v) => sum + v.quota, 0);
-
-    return { total, active, used, quota };
+    return {
+      total: vouchers.length,
+      active: vouchers.filter((v) => v.isActive).length,
+      used: vouchers.reduce((sum, v) => sum + v.used, 0),
+      quota: vouchers.reduce((sum, v) => sum + v.quota, 0),
+    };
   }, [vouchers]);
 
   const fetchVouchers = async () => {
@@ -94,13 +100,13 @@ export default function AdminVouchersPage() {
         return;
       }
 
-      setMessage("Voucher berhasil dibuat.");
+      setMessage(`Voucher berhasil dibuat. Kode: ${data.voucher.code}`);
+
       setForm({
-        code: "",
-        name: "",
         packageName: "Photo Strip",
         quota: 1,
-        price: 35000,
+        extraPrint: 0,
+        price: 25000,
       });
 
       await fetchVouchers();
@@ -185,8 +191,8 @@ export default function AdminVouchersPage() {
         </h1>
 
         <p className="mt-3 max-w-2xl font-semibold text-white/80">
-          Buat voucher untuk event, customer, promo, atau paket khusus
-          photobooth.
+          Buat voucher otomatis 4 digit untuk customer. Paket dan tambahan print
+          akan otomatis terbaca di aplikasi.
         </p>
 
         <div className="mt-7 grid gap-4 md:grid-cols-4">
@@ -219,83 +225,95 @@ export default function AdminVouchersPage() {
             Tambah Voucher
           </h2>
           <p className="mt-2 font-semibold text-slate-500">
-            Kosongkan kode jika ingin dibuat otomatis.
+            Kode voucher akan otomatis dibuat 4 digit angka.
           </p>
 
           <form onSubmit={createVoucher} className="mt-8 space-y-5">
             <div>
               <label className="mb-2 block text-sm font-black text-slate-700">
-                Kode Voucher
-              </label>
-              <input
-                value={form.code}
-                onChange={(e) =>
-                  setForm({ ...form, code: e.target.value.toUpperCase() })
-                }
-                placeholder="Contoh: MIORI-VIP"
-                className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-black text-slate-700">
-                Nama Voucher
-              </label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Voucher Opening Booth"
-                className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-black text-slate-700">
                 Paket
               </label>
+
               <select
                 value={form.packageName}
                 onChange={(e) =>
-                  setForm({ ...form, packageName: e.target.value })
+                  setForm({
+                    ...form,
+                    packageName: e.target.value,
+                    price: calculatePrice(form.extraPrint),
+                  })
                 }
                 className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-black text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
               >
                 <option value="Photo Strip">Photo Strip</option>
-                <option value="Single Photo">Single Photo</option>
-                <option value="Photo Strip + Ganci">Photo Strip + Ganci</option>
-                <option value="All Package">All Package</option>
+                <option value="4R">4R</option>
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-2 block text-sm font-black text-slate-700">
-                  Kuota
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={form.quota}
-                  onChange={(e) =>
-                    setForm({ ...form, quota: Number(e.target.value) })
-                  }
-                  className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
-                />
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">
+                Kuota Pemakaian
+              </label>
+
+              <input
+                type="number"
+                min={1}
+                value={form.quota}
+                onChange={(e) =>
+                  setForm({ ...form, quota: Number(e.target.value) })
+                }
+                className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">
+                Tambahan Print
+              </label>
+
+              <input
+                type="number"
+                min={0}
+                value={form.extraPrint}
+                onChange={(e) => {
+                  const extraPrint = Number(e.target.value);
+
+                  setForm({
+                    ...form,
+                    extraPrint,
+                    price: calculatePrice(extraPrint),
+                  });
+                }}
+                className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
+              />
+
+              <p className="mt-2 text-sm font-bold text-slate-400">
+                Per lembar tambahan print: {formatRupiah(EXTRA_PRINT_PRICE)}
+              </p>
+            </div>
+
+            <div className="rounded-[26px] bg-[#F6F7FF] p-5">
+              <p className="text-sm font-black text-slate-400">
+                Ringkasan Harga
+              </p>
+
+              <div className="mt-4 space-y-3 text-sm font-bold text-slate-500">
+                <div className="flex justify-between">
+                  <span>{form.packageName}</span>
+                  <span>{formatRupiah(PACKAGE_PRICE)}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Extra Print x {form.extraPrint}</span>
+                  <span>{formatRupiah(form.extraPrint * EXTRA_PRINT_PRICE)}</span>
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-black text-slate-700">
-                  Harga
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.price}
-                  onChange={(e) =>
-                    setForm({ ...form, price: Number(e.target.value) })
-                  }
-                  className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
-                />
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <p className="text-sm font-black text-slate-400">Total</p>
+                <h3 className="mt-1 text-3xl font-black text-[#4263FF]">
+                  {formatRupiah(form.price)}
+                </h3>
               </div>
             </div>
 
@@ -316,7 +334,7 @@ export default function AdminVouchersPage() {
               disabled={saving}
               className="h-14 w-full rounded-2xl bg-[#4263FF] font-black text-white shadow-xl shadow-[#4263FF]/25 transition hover:bg-[#3152F5] disabled:opacity-70"
             >
-              {saving ? "Menyimpan..." : "Tambah Voucher"}
+              {saving ? "Menyimpan..." : "Generate Voucher"}
             </button>
           </form>
         </section>
@@ -346,10 +364,10 @@ export default function AdminVouchersPage() {
                     Kode
                   </th>
                   <th className="p-5 text-sm font-black text-slate-400">
-                    Nama
+                    Paket
                   </th>
                   <th className="p-5 text-sm font-black text-slate-400">
-                    Paket
+                    Extra Print
                   </th>
                   <th className="p-5 text-sm font-black text-slate-400">
                     Kuota
@@ -382,14 +400,16 @@ export default function AdminVouchersPage() {
                       key={voucher.id}
                       className="border-t border-slate-100 hover:bg-[#FAFBFF]"
                     >
-                      <td className="p-5 font-black text-[#4263FF]">
-                        {voucher.code}
+                      <td className="p-5">
+                        <span className="rounded-2xl bg-[#EEF1FF] px-5 py-3 text-2xl font-black tracking-widest text-[#4263FF]">
+                          {voucher.code}
+                        </span>
                       </td>
 
-                      <td className="p-5 font-black">{voucher.name}</td>
+                      <td className="p-5 font-black">{voucher.packageName}</td>
 
                       <td className="p-5 font-bold text-slate-500">
-                        {voucher.packageName}
+                        {voucher.extraPrint || 0} lembar
                       </td>
 
                       <td className="p-5 font-bold text-slate-500">

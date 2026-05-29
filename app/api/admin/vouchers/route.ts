@@ -1,9 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function generateVoucherCode() {
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `MIORI-${random}`;
+const PACKAGE_PRICE = 25000;
+const EXTRA_PRINT_PRICE = 5000;
+
+function generateFourDigitCode() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+async function generateUniqueVoucherCode() {
+  let code = generateFourDigitCode();
+
+  for (let i = 0; i < 20; i++) {
+    const existing = await prisma.voucher.findUnique({
+      where: { code },
+    });
+
+    if (!existing) return code;
+
+    code = generateFourDigitCode();
+  }
+
+  throw new Error("Gagal generate kode voucher unik.");
 }
 
 export async function GET() {
@@ -29,40 +47,29 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const name = String(body.name || "").trim();
     const packageName = String(body.packageName || "").trim();
     const quota = Number(body.quota || 1);
-    const price = Number(body.price || 0);
-    const customCode = String(body.code || "").trim().toUpperCase();
+    const extraPrint = Number(body.extraPrint || 0);
+    const price = PACKAGE_PRICE + extraPrint * EXTRA_PRINT_PRICE;
 
-    if (!name || !packageName) {
+    if (!packageName) {
       return NextResponse.json(
-        { message: "Nama voucher dan paket wajib diisi." },
+        { message: "Paket wajib dipilih." },
         { status: 400 }
       );
     }
 
-    const code = customCode || generateVoucherCode();
-
-    const existingVoucher = await prisma.voucher.findUnique({
-      where: { code },
-    });
-
-    if (existingVoucher) {
-      return NextResponse.json(
-        { message: "Kode voucher sudah digunakan." },
-        { status: 409 }
-      );
-    }
+    const code = await generateUniqueVoucherCode();
 
     const voucher = await prisma.voucher.create({
       data: {
         code,
-        name,
+        name: `${packageName} Voucher`,
         packageName,
         quota,
-        price,
         used: 0,
+        price,
+        extraPrint,
         isActive: true,
       },
     });
