@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -166,10 +167,13 @@ export default function Home() {
           <a href="#template">Template</a>
         </div>
 
-        <button className="flex h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#7B61FF] to-[#FF4FA3] px-5 text-sm font-black text-white shadow-lg transition hover:scale-105">
-          <LogIn size={18} />
-          Login Admin
-        </button>
+        <Link
+  href="/admin/login"
+  className="flex h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#7B61FF] to-[#FF4FA3] px-5 text-sm font-black text-white shadow-lg transition hover:scale-105"
+>
+  <LogIn size={18} />
+  Login Admin
+</Link>
       </nav>
 
       <section className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-6 pb-24 pt-24 lg:grid-cols-2">
@@ -214,22 +218,6 @@ export default function Home() {
             foto, template frame, QR gallery, sampai hasil foto yang bisa
             langsung dibuka oleh tamu.
           </p>
-
-          <div className="mt-9 flex flex-wrap gap-4">
-            <button className="group flex h-14 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#7B61FF] to-[#FF4FA3] px-7 text-base font-black text-white shadow-lg shadow-[#8B7CFF]/25 transition hover:scale-105">
-              <Camera size={20} />
-              Mulai Booth
-              <ArrowRight
-                size={18}
-                className="transition group-hover:translate-x-1"
-              />
-            </button>
-
-            <button className="flex h-14 items-center gap-2 rounded-2xl bg-white px-7 text-base font-black shadow-sm ring-1 ring-slate-200 transition hover:scale-105">
-              <Calendar size={20} />
-              Lihat Event
-            </button>
-          </div>
 
           <div className="mt-9 grid max-w-xl grid-cols-3 gap-4">
             {[
