@@ -5,11 +5,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const {
-      file,
-      folder = "miori-booth",
-      resourceType = "image",
-    } = body;
+    const { file, folder = "miori-booth", resourceType = "image" } = body;
 
     if (!file) {
       return NextResponse.json(
