@@ -1,4 +1,4 @@
-import { Redis } from "@upstash/redis";
+import { redis } from "@/lib/redis";
 
 export type BoothSession = {
   sessionId: string;
@@ -9,10 +9,7 @@ export type BoothSession = {
   createdAt: string;
 };
 
-export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+export { redis };
 
 export function createSessionId() {
   const date = new Date();
