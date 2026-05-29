@@ -24,6 +24,11 @@ export async function POST(request: Request) {
       ex: 60 * 60 * 24 * 30,
     });
 
+    await redis.zadd("gallery:sessions", {
+      score: Date.now(),
+      member: sessionId,
+    });
+
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       "https://mioribooth-web.vercel.app";

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import DownloadGallery from "@/components/DownloadGallery";
 
 type PageProps = {
   params: Promise<{
@@ -8,7 +9,8 @@ type PageProps = {
 
 async function getSession(sessionId: string) {
   const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://mioribooth-web.vercel.app";
 
   const response = await fetch(
     `${baseUrl}/api/session/${sessionId}`,
@@ -38,163 +40,42 @@ export default async function DownloadPage({
   }
 
   return (
-    <main className="min-h-screen bg-[#F6F2FF]">
-      <div className="max-w-6xl mx-auto px-6 py-12">
+    <main className="min-h-screen bg-gradient-to-b from-[#F6F2FF] to-[#FFFFFF]">
+      <div className="mx-auto max-w-5xl px-5 py-10">
 
+        {/* HEADER */}
         <div className="text-center">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-lg">
+            <span className="text-4xl">📸</span>
+          </div>
+
           <h1 className="text-5xl font-black text-slate-900">
-            Download Soft File
+            Miori Booth
           </h1>
 
-          <p className="mt-4 text-slate-500">
+          <p className="mt-3 text-lg font-semibold text-slate-500">
+            Download Soft File
+          </p>
+
+          <p className="mt-2 text-sm text-slate-400">
             Session ID: {sessionId}
           </p>
         </div>
 
-        {/* FRAME RESULT */}
-        <section className="mt-12">
-          <h2 className="text-2xl font-bold mb-4">
-            Hasil Frame
-          </h2>
+        {/* GALLERY */}
+        <DownloadGallery
+          framePhoto={session.framePhoto}
+          singlePhotos={session.singlePhotos || []}
+          gif={session.gif}
+          livePhotos={session.livePhotos || []}
+        />
 
-          <div className="bg-white rounded-3xl p-4 shadow">
-            {session.framePhoto ? (
-              <img
-                src={session.framePhoto}
-                alt="Frame Result"
-                className="w-full rounded-2xl"
-              />
-            ) : (
-              <div className="h-[500px] flex items-center justify-center text-gray-400">
-                Belum ada frame photo
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* SINGLE PHOTOS */}
-        <section className="mt-12">
-          <h2 className="text-2xl font-bold mb-4">
-            Single Photos
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {session.singlePhotos?.map(
-              (photo: string, index: number) => (
-                <div
-                  key={index}
-                  className="bg-white rounded-3xl p-4 shadow"
-                >
-                  <img
-                    src={photo}
-                    className="w-full rounded-2xl"
-                    alt={`Photo ${index + 1}`}
-                  />
-
-                  <a
-                    href={photo}
-                    download
-                    target="_blank"
-                    className="
-                      mt-4
-                      block
-                      text-center
-                      py-3
-                      rounded-xl
-                      bg-[#6D5DF6]
-                      text-white
-                      font-bold
-                    "
-                  >
-                    Download
-                  </a>
-                </div>
-              )
-            )}
-          </div>
-        </section>
-
-        {/* GIF */}
-        <section className="mt-12">
-          <h2 className="text-2xl font-bold mb-4">
-            GIF
-          </h2>
-
-          <div className="bg-white rounded-3xl p-4 shadow">
-            {session.gif ? (
-              <>
-                <img
-                  src={session.gif}
-                  className="w-full rounded-2xl"
-                  alt="GIF"
-                />
-
-                <a
-                  href={session.gif}
-                  target="_blank"
-                  className="
-                    mt-4
-                    block
-                    text-center
-                    py-3
-                    rounded-xl
-                    bg-[#6D5DF6]
-                    text-white
-                    font-bold
-                  "
-                >
-                  Download GIF
-                </a>
-              </>
-            ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">
-                GIF belum tersedia
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* LIVE PHOTO */}
-        <section className="mt-12">
-          <h2 className="text-2xl font-bold mb-4">
-            Live Photos
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {session.livePhotos?.map(
-              (video: string, index: number) => (
-                <div
-                  key={index}
-                  className="bg-white rounded-3xl p-4 shadow"
-                >
-                  <video
-                    controls
-                    className="w-full rounded-2xl"
-                  >
-                    <source src={video} />
-                  </video>
-
-                  <a
-                    href={video}
-                    target="_blank"
-                    className="
-                      mt-4
-                      block
-                      text-center
-                      py-3
-                      rounded-xl
-                      bg-[#6D5DF6]
-                      text-white
-                      font-bold
-                    "
-                  >
-                    Download Live {index + 1}
-                  </a>
-                </div>
-              )
-            )}
-          </div>
-        </section>
+        {/* FOOTER */}
+        <footer className="mt-16 text-center">
+          <p className="text-sm text-slate-400 font-medium">
+            Powered by Miori Booth
+          </p>
+        </footer>
 
       </div>
     </main>
