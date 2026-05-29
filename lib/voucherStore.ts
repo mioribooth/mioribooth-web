@@ -19,3 +19,21 @@ export async function saveVoucher(voucher: VoucherData) {
 export async function getVoucher(code: string) {
   return redis.get<VoucherData>(`voucher:${code}`);
 }
+
+export async function markVoucherUsed(code: string) {
+  const voucher = await getVoucher(code);
+
+  if (!voucher) {
+    return null;
+  }
+
+  const updatedVoucher: VoucherData = {
+    ...voucher,
+    status: "USED",
+    usedAt: new Date().toISOString(),
+  };
+
+  await saveVoucher(updatedVoucher);
+
+  return updatedVoucher;
+}
