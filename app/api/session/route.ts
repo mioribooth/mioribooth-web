@@ -1,59 +1,55 @@
 import { NextResponse } from "next/server";
-import {
-  createSessionId,
-  redis,
-  type BoothSession,
-} from "@/lib/sessionStore";
+import { redis, type BoothSession } from "@/lib/sessionStore";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const sessionId = createSessionId();
+    const {
+      framePhoto = "",
+      singlePhotos = [],
+      gif = "",
+      livePhotos = [],
+      localSessionId = "",
+    } = body;
 
-    const newSession: BoothSession = {
+    const sessionId = localSessionId || `MIORI-${Date.now()}`;
+
+    const session: BoothSession = {
       sessionId,
-      framePhoto: body.framePhoto || "",
-      singlePhotos: body.singlePhotos || [],
-      gif: body.gif || "",
-      livePhotos: body.livePhotos || [],
+      framePhoto,
+      singlePhotos,
+      gif,
+      livePhotos,
       createdAt: new Date().toISOString(),
     };
 
-    await redis.set(`session:${sessionId}`, newSession, {
-      ex: 60 * 60 * 24 * 30,
-    });
+    await redis.set(`session:${sessionId}`, session);
 
     await redis.zadd("gallery:sessions", {
       score: Date.now(),
       member: sessionId,
     });
 
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "https://mioribooth-web.vercel.app";
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL || "https://mioribooth-web.vercel.app";
 
     return NextResponse.json({
       success: true,
       sessionId,
-      downloadUrl: `${siteUrl}/download/${sessionId}`,
-      session: newSession,
+      downloadUrl: `${baseUrl}/download/${sessionId}`,
+      session,
     });
   } catch (error) {
+    console.error("CREATE_SESSION_ERROR:", error);
+
     return NextResponse.json(
       {
         success: false,
-        message: "Gagal membuat session",
-        error: String(error),
+        message: "Gagal membuat session download.",
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    message: "Session API aktif memakai Upstash Redis",
-  });
 }

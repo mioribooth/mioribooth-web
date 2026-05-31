@@ -9,15 +9,11 @@ type PageProps = {
 
 async function getSession(sessionId: string) {
   const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://mioribooth-web.vercel.app";
+    process.env.NEXT_PUBLIC_SITE_URL || "https://mioribooth-web.vercel.app";
 
-  const response = await fetch(
-    `${baseUrl}/api/session/${sessionId}`,
-    {
-      cache: "no-store",
-    }
-  );
+  const response = await fetch(`${baseUrl}/api/session/${sessionId}`, {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
     return null;
@@ -28,9 +24,7 @@ async function getSession(sessionId: string) {
   return data.session;
 }
 
-export default async function DownloadPage({
-  params,
-}: PageProps) {
+export default async function DownloadPage({ params }: PageProps) {
   const { sessionId } = await params;
 
   const session = await getSession(sessionId);
@@ -42,16 +36,12 @@ export default async function DownloadPage({
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F6F2FF] to-[#FFFFFF]">
       <div className="mx-auto max-w-5xl px-5 py-10">
-
-        {/* HEADER */}
         <div className="text-center">
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-lg">
             <span className="text-4xl">📸</span>
           </div>
 
-          <h1 className="text-5xl font-black text-slate-900">
-            Miori Booth
-          </h1>
+          <h1 className="text-5xl font-black text-slate-900">Miori Booth</h1>
 
           <p className="mt-3 text-lg font-semibold text-slate-500">
             Download Soft File
@@ -62,21 +52,19 @@ export default async function DownloadPage({
           </p>
         </div>
 
-        {/* GALLERY */}
         <DownloadGallery
           framePhoto={session.framePhoto}
           singlePhotos={session.singlePhotos || []}
           gif={session.gif}
           livePhotos={session.livePhotos || []}
+          frameTemplate={session.frameTemplate || null}
         />
 
-        {/* FOOTER */}
         <footer className="mt-16 text-center">
-          <p className="text-sm text-slate-400 font-medium">
+          <p className="text-sm font-medium text-slate-400">
             Powered by Miori Booth
           </p>
         </footer>
-
       </div>
     </main>
   );

@@ -174,32 +174,6 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["🎟️", "Banner Promo", "Kelola promo dan banner booth."],
-          ["🧾", "Invoice", "Pantau invoice event dan pembayaran."],
-          ["⭐", "Subscription", "Status paket dan masa aktif sistem."],
-          ["👥", "User Management", "Kelola admin dan operator booth."],
-          ["📦", "Harga Bundle", "Atur paket, add-on, dan bundling."],
-          ["🖼️", "Template", "Atur frame dan template foto."],
-          ["🌄", "Gallery", "Lihat hasil foto customer."],
-          ["📊", "Report Analytic", "Analisa revenue dan transaksi."],
-        ].map(([icon, title, desc]) => (
-          <div
-            key={title}
-            className="group rounded-[34px] bg-white p-6 shadow-xl transition hover:-translate-y-2"
-          >
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#EEF1FF] text-2xl transition group-hover:bg-gradient-to-br group-hover:from-[#4263FF] group-hover:to-[#FF7BC3]">
-              {icon}
-            </div>
-            <h3 className="mt-5 text-xl font-black">{title}</h3>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
-              {desc}
-            </p>
-          </div>
-        ))}
-      </div>
-
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <div className="rounded-[36px] bg-white p-7 shadow-xl">
           <h2 className="text-3xl font-black">Revenue 7 Hari Terakhir</h2>

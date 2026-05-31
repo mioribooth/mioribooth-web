@@ -1,4 +1,31 @@
-import { redis } from "@/lib/redis";
+import { Redis } from "@upstash/redis";
+
+export const redis = Redis.fromEnv();
+
+export type Layer = {
+  id: string;
+  type: "photo" | "frame";
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  src?: string;
+  photoIndex?: number;
+};
+
+export type FrameTemplate = {
+  id: string;
+  name: string;
+  category: string;
+  layoutType?: "PHOTO_STRIP" | "4R";
+  isActive?: boolean;
+  backgroundColor: string;
+  thumbnail?: string;
+  layers: Layer[];
+};
 
 export type BoothSession = {
   sessionId: string;
@@ -8,16 +35,3 @@ export type BoothSession = {
   livePhotos: string[];
   createdAt: string;
 };
-
-export { redis };
-
-export function createSessionId() {
-  const date = new Date();
-
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const time = Date.now().toString().slice(-6);
-
-  return `MIORI-${y}${m}${d}-${time}`;
-}
