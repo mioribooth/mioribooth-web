@@ -12,6 +12,12 @@ export async function POST(request: Request) {
       liveFrameVideo = "",
       livePhotos = [],
       localSessionId = "",
+      uploadStatus = {
+        frame: Boolean(framePhoto),
+        live: false,
+        gif: false,
+        single: false,
+      },
     } = body;
 
     const sessionId = localSessionId || `MIORI-${Date.now()}`;
@@ -23,6 +29,7 @@ export async function POST(request: Request) {
       gif,
       liveFrameVideo,
       livePhotos,
+      uploadStatus,
       createdAt: new Date().toISOString(),
     };
 
