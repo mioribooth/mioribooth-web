@@ -53,11 +53,13 @@ export default async function DownloadPage({ params }: PageProps) {
         </div>
 
         <DownloadGallery
+          sessionId={sessionId}
           framePhoto={session.framePhoto}
           singlePhotos={session.singlePhotos || []}
           gif={session.gif}
           liveFrameVideo={session.liveFrameVideo || ""}
           livePhotos={session.livePhotos || []}
+          uploadStatus={session.uploadStatus || {}}
         />
 
         <footer className="mt-16 text-center">

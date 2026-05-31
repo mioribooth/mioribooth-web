@@ -1,26 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ViewMode = "frame" | "single" | "gif" | "live";
 
+type UploadStatus = {
+  frame?: boolean;
+  live?: boolean;
+  gif?: boolean;
+  single?: boolean;
+};
+
 type DownloadGalleryProps = {
+  sessionId: string;
   framePhoto?: string;
   singlePhotos?: string[];
   gif?: string;
   liveFrameVideo?: string;
   livePhotos?: string[];
+  uploadStatus?: UploadStatus;
 };
 
 export default function DownloadGallery({
-  framePhoto,
-  singlePhotos = [],
-  gif,
-  liveFrameVideo,
-  livePhotos = [],
+  sessionId,
+  framePhoto: initialFramePhoto,
+  singlePhotos: initialSinglePhotos = [],
+  gif: initialGif,
+  liveFrameVideo: initialLiveFrameVideo,
+  livePhotos: initialLivePhotos = [],
+  uploadStatus: initialUploadStatus,
 }: DownloadGalleryProps) {
   const [mode, setMode] = useState<ViewMode>("frame");
   const [activeSingleIndex, setActiveSingleIndex] = useState(0);
+
+  const [framePhoto, setFramePhoto] = useState(initialFramePhoto || "");
+  const [singlePhotos, setSinglePhotos] = useState(initialSinglePhotos);
+  const [gif, setGif] = useState(initialGif || "");
+  const [liveFrameVideo, setLiveFrameVideo] = useState(
+    initialLiveFrameVideo || ""
+  );
+  const [livePhotos, setLivePhotos] = useState(initialLivePhotos);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(
+    initialUploadStatus || {}
+  );
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data?.session) return;
+
+        setFramePhoto(data.session.framePhoto || "");
+        setSinglePhotos(data.session.singlePhotos || []);
+        setGif(data.session.gif || "");
+        setLiveFrameVideo(data.session.liveFrameVideo || "");
+        setLivePhotos(data.session.livePhotos || []);
+        setUploadStatus(data.session.uploadStatus || {});
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [sessionId]);
+
+  function LoadingCard({ text }: { text: string }) {
+    return (
+      <div className="rounded-[28px] bg-white p-10 text-center shadow-xl">
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#EEF1FF] border-t-[#4263FF]" />
+        <p className="mt-5 font-black text-slate-500">{text}</p>
+      </div>
+    );
+  }
 
   function renderFramePhoto() {
     return (
@@ -32,7 +86,6 @@ export default function DownloadGallery({
               alt="Frame Photo"
               className="mx-auto max-h-[760px] rounded-[28px] object-contain"
             />
-
             <a
               href={framePhoto}
               download
@@ -43,9 +96,7 @@ export default function DownloadGallery({
             </a>
           </>
         ) : (
-          <p className="p-10 text-center font-bold text-slate-400">
-            Frame photo belum tersedia.
-          </p>
+          <LoadingCard text="Frame photo sedang diproses..." />
         )}
       </div>
     );
@@ -55,31 +106,26 @@ export default function DownloadGallery({
     const selectedPhoto =
       singlePhotos[activeSingleIndex] || singlePhotos[0] || "";
 
+    if (!selectedPhoto) {
+      return <LoadingCard text="Single photo sedang diproses..." />;
+    }
+
     return (
       <div className="space-y-5">
         <div className="overflow-hidden rounded-[34px] bg-white p-5 shadow-xl">
-          {selectedPhoto ? (
-            <>
-              <img
-                src={selectedPhoto}
-                alt={`Single Photo ${activeSingleIndex + 1}`}
-                className="mx-auto max-h-[640px] rounded-[28px] object-contain"
-              />
-
-              <a
-                href={selectedPhoto}
-                download
-                target="_blank"
-                className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-              >
-                Download Foto {activeSingleIndex + 1}
-              </a>
-            </>
-          ) : (
-            <p className="p-10 text-center font-bold text-slate-400">
-              Single photo belum tersedia.
-            </p>
-          )}
+          <img
+            src={selectedPhoto}
+            alt={`Single Photo ${activeSingleIndex + 1}`}
+            className="mx-auto max-h-[640px] rounded-[28px] object-contain"
+          />
+          <a
+            href={selectedPhoto}
+            download
+            target="_blank"
+            className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
+          >
+            Download Foto {activeSingleIndex + 1}
+          </a>
         </div>
 
         {singlePhotos.length > 1 && (
@@ -104,30 +150,25 @@ export default function DownloadGallery({
   }
 
   function renderGif() {
+    if (!gif) {
+      return <LoadingCard text="GIF sedang diproses..." />;
+    }
+
     return (
       <div className="overflow-hidden rounded-[34px] bg-white p-5 shadow-xl">
-        {gif ? (
-          <>
-            <img
-              src={gif}
-              alt="GIF"
-              className="mx-auto max-h-[560px] rounded-[28px] object-contain"
-            />
-
-            <a
-              href={gif}
-              download
-              target="_blank"
-              className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-            >
-              Download GIF
-            </a>
-          </>
-        ) : (
-          <p className="p-10 text-center font-bold text-slate-400">
-            GIF belum tersedia.
-          </p>
-        )}
+        <img
+          src={gif}
+          alt="GIF"
+          className="mx-auto max-h-[560px] rounded-[28px] object-contain"
+        />
+        <a
+          href={gif}
+          download
+          target="_blank"
+          className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
+        >
+          Download GIF
+        </a>
       </div>
     );
   }
@@ -142,7 +183,6 @@ export default function DownloadGallery({
             playsInline
             className="mx-auto aspect-[2/3] max-h-[760px] rounded-[28px] bg-black object-contain"
           />
-
           <a
             href={liveFrameVideo}
             download
@@ -169,7 +209,6 @@ export default function DownloadGallery({
                 playsInline
                 className="h-[280px] w-full rounded-[22px] bg-black object-cover"
               />
-
               <a
                 href={video}
                 download
@@ -184,11 +223,7 @@ export default function DownloadGallery({
       );
     }
 
-    return (
-      <div className="rounded-[28px] bg-white p-10 text-center shadow-xl">
-        <p className="font-bold text-slate-400">Live photo belum tersedia.</p>
-      </div>
-    );
+    return <LoadingCard text="Live Photo MP4 sedang diproses..." />;
   }
 
   return (
@@ -207,7 +242,7 @@ export default function DownloadGallery({
               <button
                 key={id}
                 onClick={() => setMode(id as ViewMode)}
-                className={`flex h-14 items-center justify-center gap-2 rounded-2xl text-sm font-black transition ${
+                className={`relative flex h-14 items-center justify-center gap-2 rounded-2xl text-sm font-black transition ${
                   active
                     ? "bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-white shadow-xl"
                     : "bg-[#F6F7FF] text-slate-500 hover:bg-[#EEF1FF]"
