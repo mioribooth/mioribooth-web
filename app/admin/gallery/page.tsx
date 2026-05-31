@@ -11,6 +11,7 @@ type BoothSession = {
   gif?: string;
   livePhotos: string[];
   createdAt: string;
+  liveFrameVideo?: string;
 };
 
 type DeleteTarget = {
@@ -213,10 +214,10 @@ export default function AdminGalleryPage() {
     0
   );
 
-  const totalLive = sessions.reduce(
-    (sum, session) => sum + (session.livePhotos?.length || 0),
-    0
-  );
+  const totalLive = sessions.reduce((sum, session) => {
+  if (session.liveFrameVideo) return sum + 1;
+  return sum + (session.livePhotos?.length || 0);
+}, 0);
 
   return (
     <div className="relative text-[#101828]">
@@ -617,7 +618,7 @@ export default function AdminGalleryPage() {
                     </span>
 
                     <span className="rounded-full bg-[#FFF0F7] px-3 py-1 text-[11px] font-black text-[#FF4FA3]">
-                      {session.livePhotos?.length || 0} Live
+                      {session.liveFrameVideo ? 1 : session.livePhotos?.length || 0} Live
                     </span>
 
                     <span className="rounded-full bg-[#EEF7FF] px-3 py-1 text-[11px] font-black text-[#4F88FF]">
