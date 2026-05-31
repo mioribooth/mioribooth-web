@@ -2,52 +2,22 @@
 
 import { useState } from "react";
 
-const FRAME_WIDTH = 1200;
-const FRAME_HEIGHT = 1800;
-
 type ViewMode = "frame" | "single" | "gif" | "live";
-
-type Layer = {
-  id: string;
-  type: "photo" | "frame";
-  name: string;
-  visible: boolean;
-  locked: boolean;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  src?: string;
-};
-
-type FrameTemplate = {
-  id: string;
-  name: string;
-  category: string;
-  backgroundColor: string;
-  thumbnail?: string;
-  layers: Layer[];
-};
 
 type DownloadGalleryProps = {
   framePhoto?: string;
   singlePhotos?: string[];
   gif?: string;
+  liveFrameVideo?: string;
   livePhotos?: string[];
-  frameTemplate?: FrameTemplate | null;
 };
-
-function getPhotoNumber(layerName: string) {
-  const match = layerName.match(/Foto\s*(\d+)/i);
-  return match ? Number(match[1]) : 1;
-}
 
 export default function DownloadGallery({
   framePhoto,
   singlePhotos = [],
   gif,
+  liveFrameVideo,
   livePhotos = [],
-  frameTemplate,
 }: DownloadGalleryProps) {
   const [mode, setMode] = useState<ViewMode>("frame");
   const [activeSingleIndex, setActiveSingleIndex] = useState(0);
@@ -162,89 +132,61 @@ export default function DownloadGallery({
     );
   }
 
-  function renderLiveFrame() {
-    if (!frameTemplate || livePhotos.length === 0) {
+  function renderLive() {
+    if (liveFrameVideo) {
       return (
-        <div className="rounded-[28px] bg-white p-10 text-center shadow-xl">
-          <p className="font-bold text-slate-400">
-            Live photo belum tersedia.
-          </p>
+        <div className="overflow-hidden rounded-[34px] bg-white p-5 shadow-xl">
+          <video
+            src={liveFrameVideo}
+            controls
+            playsInline
+            className="mx-auto aspect-[2/3] max-h-[760px] rounded-[28px] bg-black object-contain"
+          />
+
+          <a
+            href={liveFrameVideo}
+            download
+            target="_blank"
+            className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
+          >
+            Download Live Photo MP4
+          </a>
+        </div>
+      );
+    }
+
+    if (livePhotos.length > 0) {
+      return (
+        <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
+          {livePhotos.map((video, index) => (
+            <div
+              key={video}
+              className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl"
+            >
+              <video
+                src={video}
+                controls
+                playsInline
+                className="h-[280px] w-full rounded-[22px] bg-black object-cover"
+              />
+
+              <a
+                href={video}
+                download
+                target="_blank"
+                className="mt-3 flex h-12 items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
+              >
+                Download Live {index + 1}
+              </a>
+            </div>
+          ))}
         </div>
       );
     }
 
     return (
-      <div className="overflow-hidden rounded-[34px] bg-white p-5 shadow-xl">
-        <div className="mx-auto aspect-[2/3] max-h-[760px] overflow-hidden rounded-[28px] bg-white">
-          <div
-            className="relative h-full w-full overflow-hidden"
-            style={{
-              backgroundColor: frameTemplate.backgroundColor || "#FFFFFF",
-            }}
-          >
-            {frameTemplate.layers.map((layer) => {
-              if (!layer.visible) return null;
-
-              const left = `${(layer.x / FRAME_WIDTH) * 100}%`;
-              const top = `${(layer.y / FRAME_HEIGHT) * 100}%`;
-              const width = `${(layer.width / FRAME_WIDTH) * 100}%`;
-              const height = `${(layer.height / FRAME_HEIGHT) * 100}%`;
-
-              if (layer.type === "photo") {
-                const photoNumber = getPhotoNumber(layer.name);
-                const video = livePhotos[photoNumber - 1];
-
-                return (
-                  <div
-                    key={layer.id}
-                    className="absolute overflow-hidden bg-black"
-                    style={{ left, top, width, height }}
-                  >
-                    {video ? (
-                      <video
-                        src={video}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        controls={false}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
-                  </div>
-                );
-              }
-
-              if (layer.type === "frame" && layer.src) {
-                return (
-                  <img
-                    key={layer.id}
-                    src={layer.src}
-                    alt="Frame"
-                    className="pointer-events-none absolute object-cover"
-                    style={{ left, top, width, height }}
-                  />
-                );
-              }
-
-              return null;
-            })}
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {livePhotos.map((video, index) => (
-            <a
-              key={video}
-              href={video}
-              download
-              target="_blank"
-              className="flex h-12 items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
-            >
-              Download Live {index + 1}
-            </a>
-          ))}
-        </div>
+      <div className="rounded-[28px] bg-white p-10 text-center shadow-xl">
+        <p className="font-bold text-slate-400">Live photo belum tersedia.</p>
       </div>
     );
   }
@@ -282,7 +224,7 @@ export default function DownloadGallery({
       {mode === "frame" && renderFramePhoto()}
       {mode === "single" && renderSinglePhotos()}
       {mode === "gif" && renderGif()}
-      {mode === "live" && renderLiveFrame()}
+      {mode === "live" && renderLive()}
     </div>
   );
 }

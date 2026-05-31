@@ -32,6 +32,7 @@ export type BoothSession = {
   framePhoto?: string;
   singlePhotos: string[];
   gif?: string;
+  liveFrameVideo?: string;
   livePhotos: string[];
   createdAt: string;
 };

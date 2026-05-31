@@ -56,8 +56,8 @@ export default async function DownloadPage({ params }: PageProps) {
           framePhoto={session.framePhoto}
           singlePhotos={session.singlePhotos || []}
           gif={session.gif}
+          liveFrameVideo={session.liveFrameVideo || ""}
           livePhotos={session.livePhotos || []}
-          frameTemplate={session.frameTemplate || null}
         />
 
         <footer className="mt-16 text-center">

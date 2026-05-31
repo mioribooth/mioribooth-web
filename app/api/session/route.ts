@@ -9,6 +9,7 @@ export async function POST(request: Request) {
       framePhoto = "",
       singlePhotos = [],
       gif = "",
+      liveFrameVideo = "",
       livePhotos = [],
       localSessionId = "",
     } = body;
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
       framePhoto,
       singlePhotos,
       gif,
+      liveFrameVideo,
       livePhotos,
       createdAt: new Date().toISOString(),
     };
