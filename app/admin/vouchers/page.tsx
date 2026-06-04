@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type LayoutType = "PHOTO_STRIP" | "4R";
+
 type Voucher = {
   id: string;
   code: string;
   name: string;
   packageName: string;
+  layoutType?: LayoutType;
   quota: number;
   used: number;
   price: number;
@@ -30,6 +33,10 @@ function calculatePrice(extraPrint: number) {
   return PACKAGE_PRICE + extraPrint * EXTRA_PRINT_PRICE;
 }
 
+function getLayoutType(packageName: string): LayoutType {
+  return packageName.toUpperCase().includes("4R") ? "4R" : "PHOTO_STRIP";
+}
+
 export default function AdminVouchersPage() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +45,8 @@ export default function AdminVouchersPage() {
   const [error, setError] = useState("");
 
   const [form, setForm] = useState({
-    packageName: "Photo Strip",
+    packageName: "2R PHOTO",
+    layoutType: "PHOTO_STRIP" as LayoutType,
     quota: 1,
     extraPrint: 0,
     price: 25000,
@@ -90,7 +98,10 @@ export default function AdminVouchersPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          layoutType: getLayoutType(form.packageName),
+        }),
       });
 
       const data = await response.json();
@@ -100,10 +111,11 @@ export default function AdminVouchersPage() {
         return;
       }
 
-      setMessage(`Voucher berhasil dibuat. Kode: ${data.voucher.code}`);
+      setMessage(`Voucher berhasil dibuat. Kode: ${data.voucher?.code || data.code}`);
 
       setForm({
-        packageName: "Photo Strip",
+        packageName: "2R PHOTO",
+        layoutType: "PHOTO_STRIP",
         quota: 1,
         extraPrint: 0,
         price: 25000,
@@ -191,8 +203,8 @@ export default function AdminVouchersPage() {
         </h1>
 
         <p className="mt-3 max-w-2xl font-semibold text-white/80">
-          Buat voucher otomatis 4 digit untuk customer. Paket dan tambahan print
-          akan otomatis terbaca di aplikasi.
+          Buat voucher otomatis 4 digit. Paket 2R akan membuka frame Photo Strip,
+          sedangkan paket 4R akan membuka frame 4R.
         </p>
 
         <div className="mt-7 grid gap-4 md:grid-cols-4">
@@ -224,9 +236,6 @@ export default function AdminVouchersPage() {
           <h2 className="mt-2 text-4xl font-black tracking-[-0.04em]">
             Tambah Voucher
           </h2>
-          <p className="mt-2 font-semibold text-slate-500">
-            Kode voucher akan otomatis dibuat 4 digit angka.
-          </p>
 
           <form onSubmit={createVoucher} className="mt-8 space-y-5">
             <div>
@@ -236,18 +245,26 @@ export default function AdminVouchersPage() {
 
               <select
                 value={form.packageName}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const packageName = e.target.value;
+                  const layoutType = getLayoutType(packageName);
+
                   setForm({
                     ...form,
-                    packageName: e.target.value,
+                    packageName,
+                    layoutType,
                     price: calculatePrice(form.extraPrint),
-                  })
-                }
+                  });
+                }}
                 className="h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 font-black text-slate-900 outline-none focus:border-[#4263FF] focus:ring-4 focus:ring-[#4263FF]/10"
               >
-                <option value="Photo Strip">Photo Strip</option>
-                <option value="4R">4R</option>
+                <option value="2R PHOTO">2R PHOTO</option>
+                <option value="4R PHOTO">4R PHOTO</option>
               </select>
+
+              <p className="mt-2 text-sm font-bold text-slate-400">
+                Layout: {form.layoutType === "4R" ? "Frame 4R" : "Photo Strip / 2R"}
+              </p>
             </div>
 
             <div>
@@ -357,106 +374,104 @@ export default function AdminVouchersPage() {
           </div>
 
           <div className="mt-7 overflow-x-auto rounded-[28px] border border-slate-100">
-            <table className="w-full min-w-[950px] text-left">
+            <table className="w-full min-w-[1050px] text-left">
               <thead className="bg-[#F6F7FF]">
                 <tr>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Kode
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Paket
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Extra Print
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Kuota
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Harga
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Status
-                  </th>
-                  <th className="p-5 text-sm font-black text-slate-400">
-                    Action
-                  </th>
+                  <th className="p-5 text-sm font-black text-slate-400">Kode</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Paket</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Layout</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Extra Print</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Kuota</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Harga</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Status</th>
+                  <th className="p-5 text-sm font-black text-slate-400">Action</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="p-10 text-center font-bold text-slate-400"
-                    >
+                    <td colSpan={8} className="p-10 text-center font-bold text-slate-400">
                       Loading voucher...
                     </td>
                   </tr>
                 ) : vouchers.length > 0 ? (
-                  vouchers.map((voucher) => (
-                    <tr
-                      key={voucher.id}
-                      className="border-t border-slate-100 hover:bg-[#FAFBFF]"
-                    >
-                      <td className="p-5">
-                        <span className="rounded-2xl bg-[#EEF1FF] px-5 py-3 text-2xl font-black tracking-widest text-[#4263FF]">
-                          {voucher.code}
-                        </span>
-                      </td>
+                  vouchers.map((voucher) => {
+                    const layoutType =
+                      voucher.layoutType || getLayoutType(voucher.packageName);
 
-                      <td className="p-5 font-black">{voucher.packageName}</td>
+                    return (
+                      <tr
+                        key={voucher.id}
+                        className="border-t border-slate-100 hover:bg-[#FAFBFF]"
+                      >
+                        <td className="p-5">
+                          <span className="rounded-2xl bg-[#EEF1FF] px-5 py-3 text-2xl font-black tracking-widest text-[#4263FF]">
+                            {voucher.code}
+                          </span>
+                        </td>
 
-                      <td className="p-5 font-bold text-slate-500">
-                        {voucher.extraPrint || 0} lembar
-                      </td>
+                        <td className="p-5 font-black">{voucher.packageName}</td>
 
-                      <td className="p-5 font-bold text-slate-500">
-                        {voucher.used}/{voucher.quota}
-                      </td>
-
-                      <td className="p-5 font-black">
-                        {formatRupiah(voucher.price)}
-                      </td>
-
-                      <td className="p-5">
-                        <span
-                          className={`rounded-full px-4 py-2 text-xs font-black ${
-                            voucher.isActive
-                              ? "bg-green-50 text-green-600"
-                              : "bg-red-50 text-red-500"
-                          }`}
-                        >
-                          {voucher.isActive ? "ACTIVE" : "INACTIVE"}
-                        </span>
-                      </td>
-
-                      <td className="p-5">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => toggleVoucher(voucher)}
-                            className="rounded-xl bg-[#EEF1FF] px-4 py-2 text-xs font-black text-[#4263FF]"
+                        <td className="p-5">
+                          <span
+                            className={`rounded-full px-4 py-2 text-xs font-black ${
+                              layoutType === "4R"
+                                ? "bg-pink-50 text-pink-600"
+                                : "bg-blue-50 text-blue-600"
+                            }`}
                           >
-                            {voucher.isActive ? "Disable" : "Enable"}
-                          </button>
+                            {layoutType === "4R" ? "4R FRAME" : "2R / STRIP"}
+                          </span>
+                        </td>
 
-                          <button
-                            onClick={() => deleteVoucher(voucher)}
-                            className="rounded-xl bg-red-50 px-4 py-2 text-xs font-black text-red-500"
+                        <td className="p-5 font-bold text-slate-500">
+                          {voucher.extraPrint || 0} lembar
+                        </td>
+
+                        <td className="p-5 font-bold text-slate-500">
+                          {voucher.used}/{voucher.quota}
+                        </td>
+
+                        <td className="p-5 font-black">
+                          {formatRupiah(voucher.price)}
+                        </td>
+
+                        <td className="p-5">
+                          <span
+                            className={`rounded-full px-4 py-2 text-xs font-black ${
+                              voucher.isActive
+                                ? "bg-green-50 text-green-600"
+                                : "bg-red-50 text-red-500"
+                            }`}
                           >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {voucher.isActive ? "ACTIVE" : "INACTIVE"}
+                          </span>
+                        </td>
+
+                        <td className="p-5">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => toggleVoucher(voucher)}
+                              className="rounded-xl bg-[#EEF1FF] px-4 py-2 text-xs font-black text-[#4263FF]"
+                            >
+                              {voucher.isActive ? "Disable" : "Enable"}
+                            </button>
+
+                            <button
+                              onClick={() => deleteVoucher(voucher)}
+                              className="rounded-xl bg-red-50 px-4 py-2 text-xs font-black text-red-500"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="p-10 text-center font-bold text-slate-400"
-                    >
+                    <td colSpan={8} className="p-10 text-center font-bold text-slate-400">
                       Belum ada voucher.
                     </td>
                   </tr>

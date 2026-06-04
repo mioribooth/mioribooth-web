@@ -5,6 +5,14 @@ import { saveRevenueTransaction } from "@/lib/revenueStore";
 const PACKAGE_PRICE = 25000;
 const EXTRA_PRINT_PRICE = 5000;
 
+function getLayoutType(packageName: string) {
+  const name = String(packageName || "").toUpperCase();
+
+  if (name.includes("4R")) return "4R";
+
+  return "PHOTO_STRIP";
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -21,9 +29,7 @@ export async function POST(request: Request) {
     }
 
     const voucher = await prisma.voucher.findUnique({
-      where: {
-        code,
-      },
+      where: { code },
     });
 
     if (!voucher) {
@@ -60,10 +66,10 @@ export async function POST(request: Request) {
     const totalAmount =
       voucher.price || PACKAGE_PRICE + extraPrint * EXTRA_PRINT_PRICE;
 
+    const layoutType = getLayoutType(voucher.packageName);
+
     const updatedVoucher = await prisma.voucher.update({
-      where: {
-        id: voucher.id,
-      },
+      where: { id: voucher.id },
       data: {
         used: {
           increment: 1,
@@ -87,12 +93,12 @@ export async function POST(request: Request) {
       voucher: {
         code: updatedVoucher.code,
         packageName: updatedVoucher.packageName,
+        layoutType,
         packagePrice: PACKAGE_PRICE,
         extraPrint,
         extraPrintPrice: extraPrint * EXTRA_PRINT_PRICE,
         totalAmount,
-        status:
-          updatedVoucher.used >= updatedVoucher.quota ? "USED" : "ACTIVE",
+        status: updatedVoucher.used >= updatedVoucher.quota ? "USED" : "ACTIVE",
         quota: updatedVoucher.quota,
         used: updatedVoucher.used,
         createdAt: updatedVoucher.createdAt,

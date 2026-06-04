@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { saveVoucher } from "@/lib/voucherStore";
 
 function generateVoucherCode() {
-  return Math.floor(
-    1000 + Math.random() * 9000
-  ).toString();
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 export async function POST(request: Request) {
