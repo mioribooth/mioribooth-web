@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { redis, type BoothSession } from "@/lib/sessionStore";
 
+type BoothSessionWithMirror = BoothSession & {
+  mirror?: boolean;
+};
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -8,7 +12,7 @@ export async function GET(
   try {
     const { sessionId } = await params;
 
-    const session = await redis.get<BoothSession>(`session:${sessionId}`);
+    const session = await redis.get<BoothSessionWithMirror>(`session:${sessionId}`);
 
     if (!session) {
       return NextResponse.json(
@@ -45,7 +49,7 @@ export async function PATCH(
     const body = await request.json();
 
     const sessionKey = `session:${sessionId}`;
-    const existing = await redis.get<BoothSession>(sessionKey);
+    const existing = await redis.get<BoothSessionWithMirror>(sessionKey);
 
     if (!existing) {
       return NextResponse.json(
@@ -57,13 +61,29 @@ export async function PATCH(
       );
     }
 
-    const updatedSession: BoothSession = {
+    const updatedSession: BoothSessionWithMirror = {
       ...existing,
-      framePhoto: body.framePhoto ?? existing.framePhoto,
-      singlePhotos: body.singlePhotos ?? existing.singlePhotos,
-      gif: body.gif ?? existing.gif,
-      liveFrameVideo: body.liveFrameVideo ?? existing.liveFrameVideo,
-      livePhotos: body.livePhotos ?? existing.livePhotos,
+
+      framePhoto:
+        body.framePhoto !== undefined ? body.framePhoto : existing.framePhoto,
+
+      singlePhotos:
+        body.singlePhotos !== undefined
+          ? body.singlePhotos
+          : existing.singlePhotos,
+
+      gif: body.gif !== undefined ? body.gif : existing.gif,
+
+      liveFrameVideo:
+        body.liveFrameVideo !== undefined
+          ? body.liveFrameVideo
+          : existing.liveFrameVideo,
+
+      livePhotos:
+        body.livePhotos !== undefined ? body.livePhotos : existing.livePhotos,
+
+      mirror: body.mirror !== undefined ? body.mirror : existing.mirror,
+
       uploadStatus: {
         ...existing.uploadStatus,
         ...(body.uploadStatus || {}),
