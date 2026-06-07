@@ -18,8 +18,61 @@ type DownloadGalleryProps = {
   gif?: string;
   liveFrameVideo?: string;
   livePhotos?: string[];
+  mirror?: boolean;
   uploadStatus?: UploadStatus;
 };
+
+function getFileExtension(url: string, fallback: string) {
+  try {
+    const cleanUrl = url.split("?")[0];
+    const match = cleanUrl.match(/\.([a-zA-Z0-9]+)$/);
+    return match?.[1] || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function forceDownload(url: string, filename: string) {
+  if (!url) return;
+
+  try {
+    const response = await fetch(url, {
+      mode: "cors",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("Gagal mengambil file download");
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.style.display = "none";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, 1000);
+  } catch {
+    // Fallback kalau provider file tidak mengizinkan fetch/CORS.
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+}
 
 export default function DownloadGallery({
   sessionId,
@@ -28,6 +81,7 @@ export default function DownloadGallery({
   gif: initialGif,
   liveFrameVideo: initialLiveFrameVideo,
   livePhotos: initialLivePhotos = [],
+  mirror: initialMirror = false,
   uploadStatus: initialUploadStatus,
 }: DownloadGalleryProps) {
   const [mode, setMode] = useState<ViewMode>("frame");
@@ -40,6 +94,7 @@ export default function DownloadGallery({
     initialLiveFrameVideo || ""
   );
   const [livePhotos, setLivePhotos] = useState(initialLivePhotos);
+  const [mirror, setMirror] = useState(Boolean(initialMirror));
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(
     initialUploadStatus || {}
   );
@@ -60,8 +115,11 @@ export default function DownloadGallery({
         setGif(data.session.gif || "");
         setLiveFrameVideo(data.session.liveFrameVideo || "");
         setLivePhotos(data.session.livePhotos || []);
+        setMirror(Boolean(data.session.mirror));
         setUploadStatus(data.session.uploadStatus || {});
-      } catch {}
+      } catch {
+        // ignore polling errors
+      }
     }, 3000);
 
     return () => clearInterval(interval);
@@ -76,6 +134,29 @@ export default function DownloadGallery({
     );
   }
 
+  function DownloadButton({
+    url,
+    label,
+    fallbackExtension,
+  }: {
+    url: string;
+    label: string;
+    fallbackExtension: string;
+  }) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          const ext = getFileExtension(url, fallbackExtension);
+          void forceDownload(url, `${sessionId}-${label}.${ext}`);
+        }}
+        className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
+      >
+        Download {label}
+      </button>
+    );
+  }
+
   function renderFramePhoto() {
     return (
       <div className="overflow-hidden rounded-[34px] bg-white p-5 shadow-xl">
@@ -86,14 +167,12 @@ export default function DownloadGallery({
               alt="Frame Photo"
               className="mx-auto max-h-[760px] rounded-[28px] object-contain"
             />
-            <a
-              href={framePhoto}
-              download
-              target="_blank"
-              className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-            >
-              Download Frame Photo
-            </a>
+
+            <DownloadButton
+              url={framePhoto}
+              label="Frame-Photo"
+              fallbackExtension="jpg"
+            />
           </>
         ) : (
           <LoadingCard text="Frame photo sedang diproses..." />
@@ -117,22 +196,24 @@ export default function DownloadGallery({
             src={selectedPhoto}
             alt={`Single Photo ${activeSingleIndex + 1}`}
             className="mx-auto max-h-[640px] rounded-[28px] object-contain"
+            style={{
+              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
+            }}
           />
-          <a
-            href={selectedPhoto}
-            download
-            target="_blank"
-            className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-          >
-            Download Foto {activeSingleIndex + 1}
-          </a>
+
+          <DownloadButton
+            url={selectedPhoto}
+            label={`Foto-${activeSingleIndex + 1}`}
+            fallbackExtension="jpg"
+          />
         </div>
 
         {singlePhotos.length > 1 && (
           <div className="grid gap-3 sm:grid-cols-3">
             {singlePhotos.map((photo, index) => (
               <button
-                key={photo}
+                key={`${photo}-${index}`}
+                type="button"
                 onClick={() => setActiveSingleIndex(index)}
                 className={`h-12 rounded-2xl text-sm font-black transition ${
                   activeSingleIndex === index
@@ -160,15 +241,12 @@ export default function DownloadGallery({
           src={gif}
           alt="GIF"
           className="mx-auto max-h-[560px] rounded-[28px] object-contain"
+          style={{
+            transform: mirror ? "scaleX(-1)" : "scaleX(1)",
+          }}
         />
-        <a
-          href={gif}
-          download
-          target="_blank"
-          className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-        >
-          Download GIF
-        </a>
+
+        <DownloadButton url={gif} label="GIF" fallbackExtension="gif" />
       </div>
     );
   }
@@ -183,14 +261,12 @@ export default function DownloadGallery({
             playsInline
             className="mx-auto aspect-[2/3] max-h-[760px] rounded-[28px] bg-black object-contain"
           />
-          <a
-            href={liveFrameVideo}
-            download
-            target="_blank"
-            className="mt-5 flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
-          >
-            Download Live Photo MP4
-          </a>
+
+          <DownloadButton
+            url={liveFrameVideo}
+            label="Live-Photo"
+            fallbackExtension="mp4"
+          />
         </div>
       );
     }
@@ -200,7 +276,7 @@ export default function DownloadGallery({
         <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
           {livePhotos.map((video, index) => (
             <div
-              key={video}
+              key={`${video}-${index}`}
               className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl"
             >
               <video
@@ -209,14 +285,17 @@ export default function DownloadGallery({
                 playsInline
                 className="h-[280px] w-full rounded-[22px] bg-black object-cover"
               />
-              <a
-                href={video}
-                download
-                target="_blank"
-                className="mt-3 flex h-12 items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
+
+              <button
+                type="button"
+                onClick={() => {
+                  const ext = getFileExtension(video, "mp4");
+                  void forceDownload(video, `${sessionId}-Live-${index + 1}.${ext}`);
+                }}
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
               >
                 Download Live {index + 1}
-              </a>
+              </button>
             </div>
           ))}
         </div>
@@ -241,6 +320,7 @@ export default function DownloadGallery({
             return (
               <button
                 key={id}
+                type="button"
                 onClick={() => setMode(id as ViewMode)}
                 className={`relative flex h-14 items-center justify-center gap-2 rounded-2xl text-sm font-black transition ${
                   active
