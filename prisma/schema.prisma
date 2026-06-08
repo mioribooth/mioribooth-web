@@ -33,3 +33,51 @@ model Voucher {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+
+model FrameTemplate {
+  id              String   @id @default(cuid())
+  name            String
+  category        String
+  layoutType      String   @default("PHOTO_STRIP")
+  backgroundColor String   @default("#FFFFFF")
+
+  thumbnail       String?
+  preview         String?
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  layers          FrameLayer[]
+}
+
+model FrameLayer {
+  id          String   @id @default(cuid())
+
+  frameId     String
+
+  type        String
+  name        String
+
+  visible     Boolean  @default(true)
+  locked      Boolean  @default(false)
+
+  x           Float
+  y           Float
+  width       Float
+  height      Float
+
+  src         String?
+  photoIndex  Int?
+
+  zIndex      Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  frame FrameTemplate @relation(fields: [frameId], references: [id], onDelete: Cascade)
+
+  @@index([frameId])
+}

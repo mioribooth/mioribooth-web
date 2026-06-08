@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type Transaction = {
   transactionId: string;
   paymentMethod: "QRIS" | "VOUCHER" | "CASH";
@@ -172,6 +174,53 @@ export default async function AdminDashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 md:grid-cols-3">
+        <Link
+          href="/admin/frames"
+          className="rounded-[36px] bg-white p-7 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl"
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EEF1FF] text-3xl">
+            🖼️
+          </div>
+
+          <h2 className="mt-6 text-3xl font-black">Frame Editor</h2>
+
+          <p className="mt-2 font-semibold text-slate-500">
+            Kelola frame, upload PNG, dan atur slot foto online.
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/vouchers"
+          className="rounded-[36px] bg-white p-7 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl"
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F3EEFF] text-3xl">
+            🎟️
+          </div>
+
+          <h2 className="mt-6 text-3xl font-black">Voucher</h2>
+
+          <p className="mt-2 font-semibold text-slate-500">
+            Buat dan pantau voucher photobooth.
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/dashboard"
+          className="rounded-[36px] bg-white p-7 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl"
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF0F7] text-3xl">
+            📊
+          </div>
+
+          <h2 className="mt-6 text-3xl font-black">Revenue</h2>
+
+          <p className="mt-2 font-semibold text-slate-500">
+            Pantau pembayaran dan transaksi terbaru.
+          </p>
+        </Link>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
