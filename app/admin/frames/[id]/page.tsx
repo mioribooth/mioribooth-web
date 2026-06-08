@@ -101,6 +101,8 @@ export default function EditFramePage() {
 
   const [history, setHistory] = useState<Layer[][]>([]);
   const [redoHistory, setRedoHistory] = useState<Layer[][]>([]);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
+  const [showRightPanel, setShowRightPanel] = useState(true);
 
   const selectedLayer = useMemo(
     () => layers.find((layer) => layer.id === selectedLayerId),
@@ -645,6 +647,57 @@ export default function EditFramePage() {
     router.push("/admin/frames");
   }
 
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const ctrl = event.ctrlKey || event.metaKey;
+
+      if (ctrl && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+
+        const selectedLayers = layers.filter((layer) =>
+          selectedLayerIds.includes(layer.id)
+        );
+
+        if (selectedLayers.length > 0) {
+          setCopiedLayer(JSON.parse(JSON.stringify(selectedLayers[0])));
+        }
+      }
+
+      if (ctrl && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+
+        if (!copiedLayer) return;
+
+        const duplicatedLayers = selectedLayerIds.length
+          ? layers.filter((layer) => selectedLayerIds.includes(layer.id))
+          : [copiedLayer];
+
+        const pasted = duplicatedLayers.map((layer, index) => ({
+          ...layer,
+          id: createId(layer.type),
+          x: layer.x + 40,
+          y: layer.y + 40,
+          photoIndex:
+            layer.type === "photo"
+              ? (layers.filter((l) => l.type === "photo").length || 0) +
+                index +
+                1
+              : layer.photoIndex,
+        }));
+
+        setLayersWithHistory((prev) => [...prev, ...pasted]);
+        setSelectedLayerIds(pasted.map((item) => item.id));
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [copiedLayer, layers, selectedLayerIds]);
+
   if (isLoading) {
     return (
       <div className="flex h-[70vh] items-center justify-center text-3xl font-black text-slate-400">
@@ -738,12 +791,12 @@ export default function EditFramePage() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-[1fr_430px] gap-6">
-        <div className="rounded-[36px] bg-white p-7 shadow-xl">
-          <div className="flex justify-center rounded-[30px] bg-[#D9DDEB] p-8">
+      <div className="mt-6 flex gap-6 h-[calc(100vh-170px)] overflow-hidden">
+        <div className="flex-1 rounded-[36px] bg-white p-7 shadow-xl overflow-hidden">
+          <div className="flex h-full items-center justify-center rounded-[30px] bg-[#D9DDEB] p-8 overflow-auto">
             <div
               ref={frameRef}
-              className="relative h-[760px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
+              className="relative h-[82vh] max-h-[980px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
               onClick={() => setSelectedLayerId("")}
             >
@@ -769,7 +822,7 @@ export default function EditFramePage() {
                 }
 
                 const color = getPhotoColor(layer.photoIndex);
-                const selected = selectedLayerId === layer.id;
+                const selected = selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id;
 
                 return (
                   <div
@@ -777,6 +830,17 @@ export default function EditFramePage() {
                     onPointerDown={(e) => startDrag(e, layer)}
                     onClick={(e) => {
                       e.stopPropagation();
+
+                      if (e.ctrlKey || e.metaKey) {
+                        setSelectedLayerIds((prev) =>
+                          prev.includes(layer.id)
+                            ? prev.filter((id) => id !== layer.id)
+                            : [...prev, layer.id]
+                        );
+                      } else {
+                        setSelectedLayerIds([layer.id]);
+                      }
+
                       setSelectedLayerId(layer.id);
                     }}
                     className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
@@ -807,7 +871,20 @@ export default function EditFramePage() {
           </div>
         </div>
 
-        <div className="space-y-5">
+        <div className={`${showRightPanel ? "w-[420px]" : "w-[76px]"} transition-all duration-300 flex-shrink-0`}>
+          <div className="sticky top-0 h-full">
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={() => setShowRightPanel((prev) => !prev)}
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4263FF] text-3xl font-black text-white shadow-lg"
+              >
+                {showRightPanel ? "→" : "←"}
+              </button>
+            </div>
+
+            {showRightPanel && (
+              <div className="h-[calc(100vh-240px)] overflow-y-auto space-y-5 pr-2">
+
           <div className="rounded-[30px] bg-white p-6 shadow-xl">
             <h2 className="text-2xl font-black">Frame Info</h2>
 
@@ -887,6 +964,75 @@ export default function EditFramePage() {
           </div>
 
           <div className="rounded-[30px] bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-black">Layers</h2>
+
+            <div className="mt-4 max-h-[340px] space-y-2 overflow-y-auto">
+              {[...layers].reverse().map((layer) => (
+                <div
+                  key={layer.id}
+                  draggable
+                  onDragStart={() => {
+                    dragLayerRef.current = layer.id;
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragLayerRef.current) {
+                      moveLayer(dragLayerRef.current, layer.id);
+                    }
+                  }}
+                  onClick={() => setSelectedLayerId(layer.id)}
+                  className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
+                    selectedLayerId === layer.id
+                      ? "bg-[#4263FF] text-white"
+                      : "bg-[#F6F7FF] text-slate-600"
+                  }`}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleVisible(layer.id);
+                    }}
+                    className="text-lg"
+                  >
+                    {layer.visible ? "👁" : "🚫"}
+                  </button>
+
+                  <span className="flex-1">
+                    {layer.name}
+                    {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLock(layer.id);
+                    }}
+                    className="text-lg"
+                  >
+                    {layer.locked ? "🔒" : "🔓"}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                onClick={sendBackward}
+                className="h-11 rounded-full bg-[#F6F7FF] font-black"
+              >
+                SEND BACK
+              </button>
+
+              <button
+                onClick={bringForward}
+                className="h-11 rounded-full bg-[#F6F7FF] font-black"
+              >
+                BRING FRONT
+              </button>
+            </div>
+          </div>
+
+<div className="rounded-[30px] bg-white p-6 shadow-xl">
             <h2 className="text-2xl font-black">Tools</h2>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1013,73 +1159,9 @@ export default function EditFramePage() {
             )}
           </div>
 
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Layers</h2>
-
-            <div className="mt-4 max-h-[340px] space-y-2 overflow-y-auto">
-              {[...layers].reverse().map((layer) => (
-                <div
-                  key={layer.id}
-                  draggable
-                  onDragStart={() => {
-                    dragLayerRef.current = layer.id;
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragLayerRef.current) {
-                      moveLayer(dragLayerRef.current, layer.id);
-                    }
-                  }}
-                  onClick={() => setSelectedLayerId(layer.id)}
-                  className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
-                    selectedLayerId === layer.id
-                      ? "bg-[#4263FF] text-white"
-                      : "bg-[#F6F7FF] text-slate-600"
-                  }`}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleVisible(layer.id);
-                    }}
-                    className="text-lg"
-                  >
-                    {layer.visible ? "👁" : "🚫"}
-                  </button>
-
-                  <span className="flex-1">
-                    {layer.name}
-                    {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
-                  </span>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleLock(layer.id);
-                    }}
-                    className="text-lg"
-                  >
-                    {layer.locked ? "🔒" : "🔓"}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <button
-                onClick={sendBackward}
-                className="h-11 rounded-full bg-[#F6F7FF] font-black"
-              >
-                SEND BACK
-              </button>
-
-              <button
-                onClick={bringForward}
-                className="h-11 rounded-full bg-[#F6F7FF] font-black"
-              >
-                BRING FRONT
-              </button>
-            </div>
+          
+              </div>
+            )}
           </div>
         </div>
       </div>
