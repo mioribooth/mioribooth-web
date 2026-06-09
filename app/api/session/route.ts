@@ -5,13 +5,14 @@ type BoothSessionWithMirror = BoothSession & {
   mirror?: boolean;
 };
 
-function resolveMirror(body: Record<string, unknown>) {
+function readMirrorValue(body: Record<string, any>) {
   return Boolean(
     body.mirror ??
       body.isMirror ??
       body.isMirrored ??
       body.mirrorEnabled ??
-      body.isMirrorEnabled ??
+      body.cameraMirror ??
+      body.filterSettings?.mirror ??
       false
   );
 }
@@ -35,7 +36,6 @@ export async function POST(request: Request) {
       },
     } = body;
 
-    const mirror = resolveMirror(body);
     const sessionId = localSessionId || `MIORI-${Date.now()}`;
 
     const session: BoothSessionWithMirror = {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       gif,
       liveFrameVideo,
       livePhotos,
-      mirror,
+      mirror: readMirrorValue(body),
       uploadStatus,
       createdAt: new Date().toISOString(),
     };

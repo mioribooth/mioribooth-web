@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ViewMode = "frame" | "single" | "gif" | "live";
 
@@ -33,7 +33,7 @@ function getFileExtension(url: string, fallback: string) {
 }
 
 function getMirroredCloudinaryUrl(url: string) {
-  if (!url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
     return url;
   }
 
@@ -44,25 +44,80 @@ function getMirroredCloudinaryUrl(url: string) {
   return url.replace("/upload/", "/upload/a_hflip/");
 }
 
-function getMirrorableUrl(url: string, shouldMirror: boolean) {
-  if (!url || !shouldMirror) return url;
+function getMirrorSafeUrl(url: string, mirror: boolean) {
+  if (!mirror) return url;
   return getMirroredCloudinaryUrl(url);
 }
 
-async function forceDownload(url: string, filename: string) {
+async function mirrorImageBlob(url: string) {
+  const response = await fetch(url, {
+    mode: "cors",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Gagal mengambil file mirror");
+  }
+
+  const blob = await response.blob();
+  const imageUrl = URL.createObjectURL(blob);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Gagal membaca gambar mirror"));
+      img.src = imageUrl;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas tidak tersedia");
+
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (mirroredBlob) => {
+          if (mirroredBlob) resolve(mirroredBlob);
+          else reject(new Error("Gagal membuat file mirror"));
+        },
+        blob.type || "image/jpeg",
+        0.95
+      );
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function forceDownload(url: string, filename: string, mirror = false) {
   if (!url) return;
 
   try {
-    const response = await fetch(url, {
-      mode: "cors",
-      cache: "no-store",
-    });
+    const finalUrl = getMirrorSafeUrl(url, mirror);
+    let blob: Blob;
 
-    if (!response.ok) {
-      throw new Error("Gagal mengambil file download");
+    if (mirror && finalUrl === url && !url.toLowerCase().includes(".gif")) {
+      blob = await mirrorImageBlob(url);
+    } else {
+      const response = await fetch(finalUrl, {
+        mode: "cors",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Gagal mengambil file download");
+      }
+
+      blob = await response.blob();
     }
 
-    const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
@@ -79,7 +134,7 @@ async function forceDownload(url: string, filename: string) {
     }, 1000);
   } catch {
     const anchor = document.createElement("a");
-    anchor.href = url;
+    anchor.href = getMirrorSafeUrl(url, mirror);
     anchor.download = filename;
     anchor.rel = "noopener";
     anchor.style.display = "none";
@@ -102,7 +157,6 @@ export default function DownloadGallery({
 }: DownloadGalleryProps) {
   const [mode, setMode] = useState<ViewMode>("frame");
   const [activeSingleIndex, setActiveSingleIndex] = useState(0);
-  const [downloadingAllSingles, setDownloadingAllSingles] = useState(false);
 
   const [framePhoto, setFramePhoto] = useState(initialFramePhoto || "");
   const [singlePhotos, setSinglePhotos] = useState(initialSinglePhotos);
@@ -115,6 +169,13 @@ export default function DownloadGallery({
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(
     initialUploadStatus || {}
   );
+
+  const mirroredSinglePhotos = useMemo(
+    () => singlePhotos.map((photo) => getMirrorSafeUrl(photo, mirror)),
+    [singlePhotos, mirror]
+  );
+
+  const mirroredGif = useMemo(() => getMirrorSafeUrl(gif, mirror), [gif, mirror]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -142,41 +203,17 @@ export default function DownloadGallery({
     return () => clearInterval(interval);
   }, [sessionId]);
 
-  useEffect(() => {
-    if (activeSingleIndex > singlePhotos.length - 1) {
-      setActiveSingleIndex(0);
-    }
-  }, [activeSingleIndex, singlePhotos.length]);
-
-  async function downloadAllSingles() {
-    if (!singlePhotos.length || downloadingAllSingles) return;
-
-    setDownloadingAllSingles(true);
-
-    try {
-      for (let index = 0; index < singlePhotos.length; index += 1) {
-        const originalUrl = singlePhotos[index];
-        const downloadUrl = getMirrorableUrl(originalUrl, mirror);
-        const ext = getFileExtension(downloadUrl, "jpg");
-
-        await forceDownload(
-          downloadUrl,
-          `${sessionId}-Single-${index + 1}.${ext}`
-        );
-
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
-      }
-    } finally {
-      setDownloadingAllSingles(false);
-    }
-  }
-
   function LoadingCard({ text }: { text: string }) {
     return (
       <div className="rounded-[28px] bg-white p-8 text-center shadow-xl sm:p-10">
-        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#EEF1FF] border-t-[#4263FF]" />
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#F6F7FF]">
+          <div className="h-11 w-11 animate-spin rounded-full border-4 border-[#EEF1FF] border-t-[#4263FF]" />
+        </div>
         <p className="mt-5 text-sm font-black text-slate-500 sm:text-base">
           {text}
+        </p>
+        <p className="mt-2 text-xs font-semibold text-slate-400">
+          Jangan tutup halaman ini dulu ya.
         </p>
       </div>
     );
@@ -186,19 +223,21 @@ export default function DownloadGallery({
     url,
     label,
     fallbackExtension,
+    shouldMirror = false,
   }: {
     url: string;
     label: string;
     fallbackExtension: string;
+    shouldMirror?: boolean;
   }) {
     return (
       <button
         type="button"
         onClick={() => {
           const ext = getFileExtension(url, fallbackExtension);
-          void forceDownload(url, `${sessionId}-${label}.${ext}`);
+          void forceDownload(url, `${sessionId}-${label}.${ext}`, shouldMirror);
         }}
-        className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] px-4 text-sm font-black text-white shadow-lg shadow-blue-200/40 active:scale-[0.99]"
+        className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] px-4 text-sm font-black text-white shadow-lg transition active:scale-[0.98]"
       >
         Download {label}
       </button>
@@ -207,13 +246,13 @@ export default function DownloadGallery({
 
   function renderFramePhoto() {
     return (
-      <div className="overflow-hidden rounded-[28px] bg-white p-4 shadow-xl sm:rounded-[34px] sm:p-5">
+      <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
         {framePhoto ? (
           <>
             <img
               src={framePhoto}
               alt="Frame Photo"
-              className="mx-auto max-h-[72vh] w-full rounded-[24px] object-contain sm:max-h-[760px] sm:rounded-[28px]"
+              className="mx-auto max-h-[76vh] w-full rounded-[22px] object-contain sm:max-h-[760px] sm:rounded-[28px]"
             />
 
             <DownloadButton
@@ -230,39 +269,53 @@ export default function DownloadGallery({
   }
 
   function renderSinglePhotos() {
-    const selectedPhoto =
+    const selectedOriginalPhoto =
       singlePhotos[activeSingleIndex] || singlePhotos[0] || "";
-    const selectedPhotoUrl = getMirrorableUrl(selectedPhoto, mirror);
+    const selectedPhoto =
+      mirroredSinglePhotos[activeSingleIndex] || mirroredSinglePhotos[0] || "";
 
     if (!selectedPhoto) {
       return <LoadingCard text="Single photo sedang diproses..." />;
     }
 
+    async function downloadAllSingles() {
+      for (let index = 0; index < singlePhotos.length; index += 1) {
+        const photo = singlePhotos[index];
+        const ext = getFileExtension(photo, "jpg");
+        await forceDownload(photo, `${sessionId}-Foto-${index + 1}.${ext}`, mirror);
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+      }
+    }
+
     return (
       <div className="space-y-5">
-        <div className="overflow-hidden rounded-[28px] bg-white p-4 shadow-xl sm:rounded-[34px] sm:p-5">
+        <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
           <img
-            src={selectedPhotoUrl}
+            src={selectedPhoto}
             alt={`Single Photo ${activeSingleIndex + 1}`}
-            className="mx-auto max-h-[68vh] w-full rounded-[24px] object-contain sm:max-h-[640px] sm:rounded-[28px]"
+            className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[640px] sm:rounded-[28px]"
+            style={{
+              transform:
+                mirror && selectedPhoto === selectedOriginalPhoto
+                  ? "scaleX(-1)"
+                  : "scaleX(1)",
+            }}
           />
 
           <DownloadButton
-            url={selectedPhotoUrl}
-            label={`Single-${activeSingleIndex + 1}`}
+            url={selectedOriginalPhoto}
+            label={`Foto-${activeSingleIndex + 1}`}
             fallbackExtension="jpg"
+            shouldMirror={mirror}
           />
 
           {singlePhotos.length > 1 && (
             <button
               type="button"
               onClick={() => void downloadAllSingles()}
-              disabled={downloadingAllSingles}
-              className="mt-3 flex h-13 min-h-13 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] px-4 text-sm font-black text-[#4263FF] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 flex h-14 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] px-4 text-sm font-black text-[#4263FF] transition active:scale-[0.98]"
             >
-              {downloadingAllSingles
-                ? "Mengunduh singles..."
-                : `Download Semua Singles (${singlePhotos.length})`}
+              Download Semua Singles
             </button>
           )}
         </div>
@@ -274,10 +327,10 @@ export default function DownloadGallery({
                 key={`${photo}-${index}`}
                 type="button"
                 onClick={() => setActiveSingleIndex(index)}
-                className={`h-11 rounded-2xl text-xs font-black transition sm:h-12 sm:text-sm ${
+                className={`h-12 rounded-2xl text-xs font-black transition sm:text-sm ${
                   activeSingleIndex === index
-                    ? "bg-[#4263FF] text-white shadow"
-                    : "bg-white text-[#4263FF] shadow-sm"
+                    ? "bg-[#4263FF] text-white"
+                    : "bg-white text-[#4263FF] shadow"
                 }`}
               >
                 Foto {index + 1}
@@ -290,21 +343,27 @@ export default function DownloadGallery({
   }
 
   function renderGif() {
-    const gifUrl = getMirrorableUrl(gif, mirror);
-
     if (!gif) {
       return <LoadingCard text="GIF sedang diproses..." />;
     }
 
     return (
-      <div className="overflow-hidden rounded-[28px] bg-white p-4 shadow-xl sm:rounded-[34px] sm:p-5">
+      <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
         <img
-          src={gifUrl}
+          src={mirroredGif}
           alt="GIF"
-          className="mx-auto max-h-[68vh] w-full rounded-[24px] object-contain sm:max-h-[560px] sm:rounded-[28px]"
+          className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[560px] sm:rounded-[28px]"
+          style={{
+            transform: mirror && mirroredGif === gif ? "scaleX(-1)" : "scaleX(1)",
+          }}
         />
 
-        <DownloadButton url={gifUrl} label="GIF" fallbackExtension="gif" />
+        <DownloadButton
+          url={gif}
+          label="GIF"
+          fallbackExtension="gif"
+          shouldMirror={mirror}
+        />
       </div>
     );
   }
@@ -312,12 +371,12 @@ export default function DownloadGallery({
   function renderLive() {
     if (liveFrameVideo) {
       return (
-        <div className="overflow-hidden rounded-[28px] bg-white p-4 shadow-xl sm:rounded-[34px] sm:p-5">
+        <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
           <video
             src={liveFrameVideo}
             controls
             playsInline
-            className="mx-auto aspect-[2/3] max-h-[72vh] w-full rounded-[24px] bg-black object-contain sm:max-h-[760px] sm:rounded-[28px]"
+            className="mx-auto aspect-[2/3] max-h-[76vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[760px] sm:rounded-[28px]"
           />
 
           <DownloadButton
@@ -331,7 +390,7 @@ export default function DownloadGallery({
 
     if (livePhotos.length > 0) {
       return (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
           {livePhotos.map((video, index) => (
             <div
               key={`${video}-${index}`}
@@ -348,10 +407,7 @@ export default function DownloadGallery({
                 type="button"
                 onClick={() => {
                   const ext = getFileExtension(video, "mp4");
-                  void forceDownload(
-                    video,
-                    `${sessionId}-Live-${index + 1}.${ext}`
-                  );
+                  void forceDownload(video, `${sessionId}-Live-${index + 1}.${ext}`);
                 }}
                 className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
               >
@@ -367,8 +423,8 @@ export default function DownloadGallery({
   }
 
   return (
-    <div className="mt-5 sm:mt-8">
-      <div className="mb-5 rounded-[24px] bg-white p-2 shadow-xl sm:mb-8 sm:rounded-[32px] sm:p-3">
+    <div className="mt-5 sm:mt-12">
+      <div className="mb-5 rounded-[26px] bg-white p-2 shadow-xl sm:mb-8 sm:rounded-[32px] sm:p-3">
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
           {[
             ["frame", "Frame", "fa-image"],
@@ -389,9 +445,8 @@ export default function DownloadGallery({
                     : "bg-[#F6F7FF] text-slate-500 hover:bg-[#EEF1FF]"
                 }`}
               >
-                <i className={`fa-solid ${icon}`} />
-                <span className="hidden xs:inline sm:inline">{label}</span>
-                <span className="inline xs:hidden sm:hidden">{label}</span>
+                <i className={`fa-solid ${icon} hidden sm:inline`} />
+                {label}
               </button>
             );
           })}

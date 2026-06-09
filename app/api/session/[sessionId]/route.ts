@@ -5,6 +5,30 @@ type BoothSessionWithMirror = BoothSession & {
   mirror?: boolean;
 };
 
+function readMirrorValue(body: Record<string, any>, fallback?: boolean) {
+  if (
+    body.mirror === undefined &&
+    body.isMirror === undefined &&
+    body.isMirrored === undefined &&
+    body.mirrorEnabled === undefined &&
+    body.cameraMirror === undefined &&
+    body.filterSettings?.mirror === undefined
+  ) {
+    return fallback;
+  }
+
+  return Boolean(
+    body.mirror ??
+      body.isMirror ??
+      body.isMirrored ??
+      body.mirrorEnabled ??
+      body.cameraMirror ??
+      body.filterSettings?.mirror ??
+      fallback ??
+      false
+  );
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -12,7 +36,9 @@ export async function GET(
   try {
     const { sessionId } = await params;
 
-    const session = await redis.get<BoothSessionWithMirror>(`session:${sessionId}`);
+    const session = await redis.get<BoothSessionWithMirror>(
+      `session:${sessionId}`
+    );
 
     if (!session) {
       return NextResponse.json(
@@ -82,7 +108,7 @@ export async function PATCH(
       livePhotos:
         body.livePhotos !== undefined ? body.livePhotos : existing.livePhotos,
 
-      mirror: body.mirror !== undefined ? body.mirror : existing.mirror,
+      mirror: readMirrorValue(body, existing.mirror) ?? existing.mirror,
 
       uploadStatus: {
         ...existing.uploadStatus,
