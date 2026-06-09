@@ -723,7 +723,48 @@ export default function CreateFramePage() {
 
   return (
     <div className="min-h-[calc(100vh-80px)] text-[#101828]">
-      <div className="grid h-[calc(100vh-92px)] grid-cols-[minmax(520px,1fr)_350px_360px] gap-5 overflow-hidden">
+      <div className="grid h-[calc(100vh-92px)] grid-cols-[240px_minmax(520px,1fr)_350px_360px] gap-5 overflow-hidden">
+        <aside className="flex min-h-0 flex-col rounded-[32px] bg-white p-5 shadow-xl">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4263FF] text-2xl text-white">
+                📸
+              </div>
+              <div>
+                <h2 className="text-xl font-black">Miori Booth</h2>
+                <p className="text-xs font-bold text-slate-400">Frame Creator</p>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-2">
+              <button
+                onClick={() => router.push("/admin/frames")}
+                className="flex h-12 w-full items-center rounded-2xl px-4 text-left font-black text-slate-500 hover:bg-[#F6F7FF]"
+              >
+                ← Library
+              </button>
+              <button className="flex h-12 w-full items-center rounded-2xl bg-[#4263FF] px-4 text-left font-black text-white">
+                Frame Editor
+              </button>
+              <button
+                onClick={saveFrame}
+                disabled={isSaving}
+                className="flex h-12 w-full items-center rounded-2xl bg-green-50 px-4 text-left font-black text-green-700 disabled:opacity-50"
+              >
+                {isSaving ? "Menyimpan..." : "Simpan Frame"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-auto rounded-3xl bg-[#F6F7FF] p-4">
+            <p className="text-xs font-black uppercase text-slate-400">Status</p>
+            <p className="mt-2 text-sm font-black text-red-500">● Belum Disimpan</p>
+            <p className="mt-3 text-xs font-bold leading-relaxed text-slate-400">
+              Shortcut: Ctrl + klik untuk multi select, Ctrl+C, Ctrl+V, Delete, Arrow.
+            </p>
+          </div>
+        </aside>
+
         <section className="flex min-w-0 flex-col rounded-[32px] bg-white shadow-xl">
           <div className="flex h-[76px] items-center justify-between border-b border-slate-100 px-6">
             <div>
@@ -754,7 +795,7 @@ export default function CreateFramePage() {
                       src={layer.src}
                       alt="Frame"
                       draggable={false}
-                      className="absolute select-none object-cover"
+                      className="pointer-events-none absolute select-none object-cover"
                       style={{
                         left: `${(layer.x / FRAME_WIDTH) * 100}%`,
                         top: `${(layer.y / FRAME_HEIGHT) * 100}%`,
