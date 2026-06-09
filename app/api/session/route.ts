@@ -5,6 +5,17 @@ type BoothSessionWithMirror = BoothSession & {
   mirror?: boolean;
 };
 
+function resolveMirror(body: Record<string, unknown>) {
+  return Boolean(
+    body.mirror ??
+      body.isMirror ??
+      body.isMirrored ??
+      body.mirrorEnabled ??
+      body.isMirrorEnabled ??
+      false
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -15,7 +26,6 @@ export async function POST(request: Request) {
       gif = "",
       liveFrameVideo = "",
       livePhotos = [],
-      mirror = false,
       localSessionId = "",
       uploadStatus = {
         frame: Boolean(framePhoto),
@@ -25,6 +35,7 @@ export async function POST(request: Request) {
       },
     } = body;
 
+    const mirror = resolveMirror(body);
     const sessionId = localSessionId || `MIORI-${Date.now()}`;
 
     const session: BoothSessionWithMirror = {

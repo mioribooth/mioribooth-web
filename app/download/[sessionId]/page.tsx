@@ -64,6 +64,7 @@ export default async function DownloadPage({ params }: PageProps) {
             gif={session.gif}
             liveFrameVideo={session.liveFrameVideo || ""}
             livePhotos={session.livePhotos || []}
+            mirror={Boolean(session.mirror)}
             uploadStatus={session.uploadStatus || {}}
           />
         </section>
