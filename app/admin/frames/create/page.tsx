@@ -723,37 +723,7 @@ export default function CreateFramePage() {
 
   return (
     <div className="min-h-[calc(100vh-80px)] text-[#101828]">
-      <div className="grid h-[calc(100vh-92px)] grid-cols-[230px_minmax(420px,1fr)_350px_360px] gap-5 overflow-hidden">
-        <aside className="flex flex-col rounded-[32px] bg-[#101828] p-5 text-white shadow-xl">
-          <div className="mb-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4263FF] text-2xl">📸</div>
-              <div>
-                <h1 className="text-xl font-black">Miori Booth</h1>
-                <p className="text-xs font-bold text-white/50">Frame Creator</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="px-3 text-xs font-black uppercase tracking-widest text-white/35">Menu</p>
-            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">⌂ Dashboard</button>
-            <button className="flex h-12 items-center gap-3 rounded-2xl bg-[#4263FF] px-4 text-left font-black text-white">▣ Frames</button>
-            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">⇩ Downloads</button>
-          </div>
-
-          <div className="mt-8 space-y-2">
-            <p className="px-3 text-xs font-black uppercase tracking-widest text-white/35">Tools</p>
-            <button className="flex h-12 items-center gap-3 rounded-2xl bg-white/10 px-4 text-left font-black text-white">✦ Create Frame</button>
-            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">👁 Preview</button>
-          </div>
-
-          <div className="mt-auto rounded-3xl bg-white/10 p-4">
-            <p className="font-black">Admin</p>
-            <p className="text-xs font-semibold text-white/45">mioribooth</p>
-          </div>
-        </aside>
-
+      <div className="grid h-[calc(100vh-92px)] grid-cols-[minmax(520px,1fr)_350px_360px] gap-5 overflow-hidden">
         <section className="flex min-w-0 flex-col rounded-[32px] bg-white shadow-xl">
           <div className="flex h-[76px] items-center justify-between border-b border-slate-100 px-6">
             <div>
