@@ -64,6 +64,7 @@ export default function CreateFramePage() {
   const [layoutType, setLayoutType] = useState<LayoutType>("PHOTO_STRIP");
   const [backgroundColor, setBackgroundColor] = useState("#FFFFFF");
   const [thumbnail, setThumbnail] = useState("");
+  const [frameDetectSource, setFrameDetectSource] = useState("");
   const [layers, setLayers] = useState<Layer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -121,6 +122,7 @@ export default function CreateFramePage() {
       };
 
       setThumbnail(result.url);
+      setFrameDetectSource(dataUrl);
       setLayers((prev) => [
         frameLayer,
         ...prev.filter((layer) => layer.type !== "frame"),
@@ -271,6 +273,206 @@ export default function CreateFramePage() {
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  }
+
+  async function detectTransparentSlotsFromImage(src: string) {
+    return await new Promise<Layer[]>((resolve) => {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = FRAME_WIDTH;
+        canvas.height = FRAME_HEIGHT;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          resolve([]);
+          return;
+        }
+
+        ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        ctx.drawImage(image, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+        let imageData: ImageData;
+        try {
+          imageData = ctx.getImageData(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        } catch (error) {
+          console.error("AUTO_DETECT_CANVAS_ERROR:", error);
+          resolve([]);
+          return;
+        }
+
+        const data = imageData.data;
+        const step = 8;
+        const cols = Math.ceil(FRAME_WIDTH / step);
+        const rows = Math.ceil(FRAME_HEIGHT / step);
+        const visited = new Uint8Array(cols * rows);
+
+        function cellKey(cx: number, cy: number) {
+          return cy * cols + cx;
+        }
+
+        function isEmptyCell(cx: number, cy: number) {
+          const startX = cx * step;
+          const startY = cy * step;
+          let emptyCount = 0;
+          let total = 0;
+
+          for (let y = startY; y < Math.min(startY + step, FRAME_HEIGHT); y += 2) {
+            for (let x = startX; x < Math.min(startX + step, FRAME_WIDTH); x += 2) {
+              const index = (y * FRAME_WIDTH + x) * 4;
+              const red = data[index];
+              const green = data[index + 1];
+              const blue = data[index + 2];
+              const alpha = data[index + 3];
+
+              const isTransparent = alpha < 45;
+              const isWhiteSlot = alpha > 220 && red > 238 && green > 238 && blue > 238;
+
+              if (isTransparent || isWhiteSlot) emptyCount += 1;
+              total += 1;
+            }
+          }
+
+          return total > 0 && emptyCount / total > 0.82;
+        }
+
+        const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+        for (let cy = 0; cy < rows; cy++) {
+          for (let cx = 0; cx < cols; cx++) {
+            const startKey = cellKey(cx, cy);
+            if (visited[startKey] || !isEmptyCell(cx, cy)) continue;
+
+            const queue: Array<[number, number]> = [[cx, cy]];
+            visited[startKey] = 1;
+
+            let minX = cx;
+            let maxX = cx;
+            let minY = cy;
+            let maxY = cy;
+            let count = 0;
+
+            while (queue.length) {
+              const [qx, qy] = queue.shift()!;
+              count += 1;
+              minX = Math.min(minX, qx);
+              maxX = Math.max(maxX, qx);
+              minY = Math.min(minY, qy);
+              maxY = Math.max(maxY, qy);
+
+              const neighbors = [
+                [qx + 1, qy],
+                [qx - 1, qy],
+                [qx, qy + 1],
+                [qx, qy - 1],
+              ];
+
+              for (const [nx, ny] of neighbors) {
+                if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+
+                const nextKey = cellKey(nx, ny);
+                if (visited[nextKey] || !isEmptyCell(nx, ny)) continue;
+
+                visited[nextKey] = 1;
+                queue.push([nx, ny]);
+              }
+            }
+
+            const box = {
+              x: minX * step,
+              y: minY * step,
+              width: (maxX - minX + 1) * step,
+              height: (maxY - minY + 1) * step,
+            };
+
+            const area = box.width * box.height;
+            const touchesEdge =
+              box.x <= 12 ||
+              box.y <= 12 ||
+              box.x + box.width >= FRAME_WIDTH - 12 ||
+              box.y + box.height >= FRAME_HEIGHT - 12;
+
+            if (
+              count > 80 &&
+              area > 22000 &&
+              box.width > 120 &&
+              box.height > 120 &&
+              !touchesEdge
+            ) {
+              boxes.push(box);
+            }
+          }
+        }
+
+        const detectedBoxes = boxes
+          .sort((a, b) => b.width * b.height - a.width * a.height)
+          .filter((box, index, arr) => {
+            return !arr.some((other, otherIndex) => {
+              if (otherIndex >= index) return false;
+
+              const overlapX = Math.max(
+                0,
+                Math.min(box.x + box.width, other.x + other.width) - Math.max(box.x, other.x)
+              );
+              const overlapY = Math.max(
+                0,
+                Math.min(box.y + box.height, other.y + other.height) - Math.max(box.y, other.y)
+              );
+              const overlapArea = overlapX * overlapY;
+              const boxArea = box.width * box.height;
+
+              return overlapArea / boxArea > 0.55;
+            });
+          })
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .slice(0, 12);
+
+        const detectedLayers: Layer[] = detectedBoxes.map((box, index) => ({
+          id: createId("photo"),
+          type: "photo",
+          name: `Photo ${index + 1}`,
+          photoIndex: index + 1,
+          visible: true,
+          locked: false,
+          x: Math.round(box.x),
+          y: Math.round(box.y),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        }));
+
+        resolve(detectedLayers);
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = src;
+    });
+  }
+
+  async function autoDetectPhotoSlots() {
+    const frameLayer = layers.find((layer) => layer.type === "frame" && layer.src);
+
+    if (!frameLayer?.src && !frameDetectSource) {
+      alert("Upload frame PNG dulu, lalu klik Auto Detect Slot.");
+      return;
+    }
+
+    const detectedLayers = await detectTransparentSlotsFromImage(
+      frameDetectSource || frameLayer?.src || ""
+    );
+
+    if (!detectedLayers.length) {
+      alert("Belum ketemu slot kosong. Pakai PNG transparan, atau area slot harus putih polos.");
+      return;
+    }
+
+    setLayers((prev) => [
+      ...prev.filter((layer) => layer.type !== "photo"),
+      ...detectedLayers,
+    ]);
+
+    setSelectedLayerId(detectedLayers[0]?.id || "");
   }
 
   async function saveFrame() {
@@ -460,6 +662,7 @@ export default function CreateFramePage() {
                 {isUploadingFrame ? "Uploading..." : "Upload Frame"}
                 <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => uploadFrameImage(e.target.files?.[0] || null)} />
               </label>
+              <button onClick={autoDetectPhotoSlots} className="col-span-2 h-16 rounded-2xl bg-[#22C55E] font-black text-white">Auto Detect Slot</button>
               <button onClick={duplicateSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Duplicate</button>
               <button onClick={deleteSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-red-50 font-black text-red-500 disabled:opacity-40">Delete</button>
               <button onClick={() => selectedLayer && toggleLock(selectedLayer.id)} disabled={!selectedLayer || selectedLayer.type === "frame"} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Lock</button>
