@@ -134,6 +134,7 @@ export default function EditFramePage() {
         setIsActive(frame.isActive ?? true);
         setLayers(Array.isArray(frame.layers) ? frame.layers : []);
         setSelectedLayerId(frame.layers?.[0]?.id || "");
+        setSelectedLayerIds(frame.layers?.[0]?.id ? [frame.layers[0].id] : []);
 
         const framesResponse = await fetch("/api/frames", { cache: "no-store" });
         const framesResult = await framesResponse.json();
@@ -263,6 +264,7 @@ export default function EditFramePage() {
 
     setLayersWithHistory((prev) => [...prev, newLayer]);
     setSelectedLayerId(newLayer.id);
+    setSelectedLayerIds([newLayer.id]);
   }
 
   function updateLayer(layerId: string, data: Partial<Layer>, saveHistory = true) {
@@ -283,13 +285,20 @@ export default function EditFramePage() {
   }
 
   function deleteSelectedLayer() {
-    if (!selectedLayer) return;
+    const idsToDelete = selectedLayerIds.length
+      ? selectedLayerIds
+      : selectedLayer
+        ? [selectedLayer.id]
+        : [];
+
+    if (!idsToDelete.length) return;
 
     setLayersWithHistory((prev) =>
-      prev.filter((layer) => layer.id !== selectedLayer.id)
+      prev.filter((layer) => !idsToDelete.includes(layer.id))
     );
 
     setSelectedLayerId("");
+    setSelectedLayerIds([]);
   }
 
   function duplicateSelectedLayer() {
@@ -308,24 +317,41 @@ export default function EditFramePage() {
   }
 
   function copyLayer() {
-    if (!selectedLayer) return;
-    setCopiedLayer(JSON.parse(JSON.stringify(selectedLayer)));
+    const selected = layers.filter((layer) =>
+      selectedLayerIds.length
+        ? selectedLayerIds.includes(layer.id)
+        : selectedLayer?.id === layer.id
+    );
+
+    if (!selected.length) return;
+
+    setCopiedLayer(JSON.parse(JSON.stringify(selected[0])));
+    localStorage.setItem("miori-multi-copy", JSON.stringify(selected));
   }
 
   function pasteLayer() {
-    if (!copiedLayer) return;
+    const raw = localStorage.getItem("miori-multi-copy");
 
-    const pastedLayer: Layer = {
-      ...copiedLayer,
-      id: createId(copiedLayer.type),
-      x: copiedLayer.x + 60,
-      y: copiedLayer.y + 60,
+    const copiedLayers: Layer[] = raw
+      ? JSON.parse(raw)
+      : copiedLayer
+        ? [copiedLayer]
+        : [];
+
+    if (!copiedLayers.length) return;
+
+    const pastedLayers: Layer[] = copiedLayers.map((layer) => ({
+      ...layer,
+      id: createId(layer.type),
+      x: layer.x + 60,
+      y: layer.y + 60,
       visible: true,
-      locked: copiedLayer.type === "frame" ? true : false,
-    };
+      locked: layer.type === "frame" ? true : false,
+    }));
 
-    setLayersWithHistory((prev) => [...prev, pastedLayer]);
-    setSelectedLayerId(pastedLayer.id);
+    setLayersWithHistory((prev) => [...prev, ...pastedLayers]);
+    setSelectedLayerId(pastedLayers[0]?.id || "");
+    setSelectedLayerIds(pastedLayers.map((layer) => layer.id));
   }
 
   function undo() {
@@ -462,13 +488,32 @@ export default function EditFramePage() {
     updateLayer(layerId, { locked: !layer.locked });
   }
 
+  function selectLayer(layerId: string, multi = false) {
+    setSelectedLayerIds((prev) => {
+      if (multi) {
+        return prev.includes(layerId)
+          ? prev.filter((id) => id !== layerId)
+          : [...prev, layerId];
+      }
+
+      return [layerId];
+    });
+
+    setSelectedLayerId(layerId);
+  }
+
   function startDrag(e: React.PointerEvent, layer: Layer) {
     if (layer.locked || layer.type === "frame") return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    setSelectedLayerId(layer.id);
+    const isMultiSelect = e.ctrlKey || e.metaKey || e.shiftKey;
+
+    selectLayer(layer.id, isMultiSelect);
+
+    if (isMultiSelect) return;
+
     markDirty();
     pushHistory();
 
@@ -616,6 +661,7 @@ export default function EditFramePage() {
 
       if (arrowKeys.includes(e.key) && selectedLayerIds.length) {
         e.preventDefault();
+        markDirty();
 
         setLayers((prev) =>
           prev.map((layer) => {
@@ -758,56 +804,6 @@ export default function EditFramePage() {
   }
 
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const ctrl = event.ctrlKey || event.metaKey;
-
-      if (ctrl && event.key.toLowerCase() === "c") {
-        event.preventDefault();
-
-        const selectedLayers = layers.filter((layer) =>
-          selectedLayerIds.includes(layer.id)
-        );
-
-        if (selectedLayers.length > 0) {
-          setCopiedLayer(JSON.parse(JSON.stringify(selectedLayers[0])));
-        }
-      }
-
-      if (ctrl && event.key.toLowerCase() === "v") {
-        event.preventDefault();
-
-        if (!copiedLayer) return;
-
-        const duplicatedLayers = selectedLayerIds.length
-          ? layers.filter((layer) => selectedLayerIds.includes(layer.id))
-          : [copiedLayer];
-
-        const pasted = duplicatedLayers.map((layer, index) => ({
-          ...layer,
-          id: createId(layer.type),
-          x: layer.x + 40,
-          y: layer.y + 40,
-          photoIndex:
-            layer.type === "photo"
-              ? (layers.filter((l) => l.type === "photo").length || 0) +
-                index +
-                1
-              : layer.photoIndex,
-        }));
-
-        setLayersWithHistory((prev) => [...prev, ...pasted]);
-        setSelectedLayerIds(pasted.map((item) => item.id));
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [copiedLayer, layers, selectedLayerIds]);
-
   if (isLoading) {
     return (
       <div className="flex h-[70vh] items-center justify-center text-3xl font-black text-slate-400">
@@ -908,7 +904,10 @@ export default function EditFramePage() {
               ref={frameRef}
               className="relative h-[82vh] max-h-[980px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
-              onClick={() => setSelectedLayerId("")}
+              onClick={() => {
+                setSelectedLayerId("");
+                setSelectedLayerIds([]);
+              }}
             >
               {layers.map((layer) => {
                 if (!layer.visible) return null;
@@ -940,18 +939,6 @@ export default function EditFramePage() {
                     onPointerDown={(e) => startDrag(e, layer)}
                     onClick={(e) => {
                       e.stopPropagation();
-
-                      if (e.shiftKey) {
-                        setSelectedLayerIds((prev) =>
-                          prev.includes(layer.id)
-                            ? prev.filter((id) => id !== layer.id)
-                            : [...prev, layer.id]
-                        );
-                      } else {
-                        setSelectedLayerIds([layer.id]);
-                      }
-
-                      setSelectedLayerId(layer.id);
                     }}
                     className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
                       layer.locked ? "cursor-not-allowed" : "cursor-move"
@@ -1091,20 +1078,10 @@ export default function EditFramePage() {
                     }
                   }}
                   onClick={(e) => {
-                          if (e.ctrlKey || e.metaKey) {
-                            setSelectedLayerIds((prev) =>
-                              prev.includes(layer.id)
-                                ? prev.filter((id) => id !== layer.id)
-                                : [...prev, layer.id]
-                            );
-                          } else {
-                            setSelectedLayerIds([layer.id]);
-                          }
-
-                          setSelectedLayerId(layer.id);
-                        }}
+                    selectLayer(layer.id, e.ctrlKey || e.metaKey || e.shiftKey);
+                  }}
                   className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
-                    selectedLayerId === layer.id
+                    selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id
                       ? "bg-[#4263FF] text-white"
                       : "bg-[#F6F7FF] text-slate-600"
                   }`}
