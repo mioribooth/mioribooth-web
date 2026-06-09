@@ -941,7 +941,7 @@ export default function EditFramePage() {
                     onClick={(e) => {
                       e.stopPropagation();
 
-                      if (e.ctrlKey || e.metaKey) {
+                      if (e.shiftKey) {
                         setSelectedLayerIds((prev) =>
                           prev.includes(layer.id)
                             ? prev.filter((id) => id !== layer.id)
