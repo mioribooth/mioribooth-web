@@ -134,7 +134,6 @@ export default function EditFramePage() {
         setIsActive(frame.isActive ?? true);
         setLayers(Array.isArray(frame.layers) ? frame.layers : []);
         setSelectedLayerId(frame.layers?.[0]?.id || "");
-        setSelectedLayerIds(frame.layers?.[0]?.id ? [frame.layers[0].id] : []);
 
         const framesResponse = await fetch("/api/frames", { cache: "no-store" });
         const framesResult = await framesResponse.json();
@@ -264,7 +263,6 @@ export default function EditFramePage() {
 
     setLayersWithHistory((prev) => [...prev, newLayer]);
     setSelectedLayerId(newLayer.id);
-    setSelectedLayerIds([newLayer.id]);
   }
 
   function updateLayer(layerId: string, data: Partial<Layer>, saveHistory = true) {
@@ -285,20 +283,13 @@ export default function EditFramePage() {
   }
 
   function deleteSelectedLayer() {
-    const idsToDelete = selectedLayerIds.length
-      ? selectedLayerIds
-      : selectedLayer
-        ? [selectedLayer.id]
-        : [];
-
-    if (!idsToDelete.length) return;
+    if (!selectedLayer) return;
 
     setLayersWithHistory((prev) =>
-      prev.filter((layer) => !idsToDelete.includes(layer.id))
+      prev.filter((layer) => layer.id !== selectedLayer.id)
     );
 
     setSelectedLayerId("");
-    setSelectedLayerIds([]);
   }
 
   function duplicateSelectedLayer() {
@@ -317,41 +308,24 @@ export default function EditFramePage() {
   }
 
   function copyLayer() {
-    const selected = layers.filter((layer) =>
-      selectedLayerIds.length
-        ? selectedLayerIds.includes(layer.id)
-        : selectedLayer?.id === layer.id
-    );
-
-    if (!selected.length) return;
-
-    setCopiedLayer(JSON.parse(JSON.stringify(selected[0])));
-    localStorage.setItem("miori-multi-copy", JSON.stringify(selected));
+    if (!selectedLayer) return;
+    setCopiedLayer(JSON.parse(JSON.stringify(selectedLayer)));
   }
 
   function pasteLayer() {
-    const raw = localStorage.getItem("miori-multi-copy");
+    if (!copiedLayer) return;
 
-    const copiedLayers: Layer[] = raw
-      ? JSON.parse(raw)
-      : copiedLayer
-        ? [copiedLayer]
-        : [];
-
-    if (!copiedLayers.length) return;
-
-    const pastedLayers: Layer[] = copiedLayers.map((layer) => ({
-      ...layer,
-      id: createId(layer.type),
-      x: layer.x + 60,
-      y: layer.y + 60,
+    const pastedLayer: Layer = {
+      ...copiedLayer,
+      id: createId(copiedLayer.type),
+      x: copiedLayer.x + 60,
+      y: copiedLayer.y + 60,
       visible: true,
-      locked: layer.type === "frame" ? true : false,
-    }));
+      locked: copiedLayer.type === "frame" ? true : false,
+    };
 
-    setLayersWithHistory((prev) => [...prev, ...pastedLayers]);
-    setSelectedLayerId(pastedLayers[0]?.id || "");
-    setSelectedLayerIds(pastedLayers.map((layer) => layer.id));
+    setLayersWithHistory((prev) => [...prev, pastedLayer]);
+    setSelectedLayerId(pastedLayer.id);
   }
 
   function undo() {
@@ -488,72 +462,33 @@ export default function EditFramePage() {
     updateLayer(layerId, { locked: !layer.locked });
   }
 
-  function selectLayer(layerId: string, multi = false) {
-    setSelectedLayerIds((prev) => {
-      if (multi) {
-        return prev.includes(layerId)
-          ? prev.filter((id) => id !== layerId)
-          : [...prev, layerId];
-      }
-
-      return [layerId];
-    });
-
-    setSelectedLayerId(layerId);
-  }
-
   function startDrag(e: React.PointerEvent, layer: Layer) {
     if (layer.locked || layer.type === "frame") return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    const isMultiSelect = e.ctrlKey || e.metaKey || e.shiftKey;
-
-    if (isMultiSelect) {
-      selectLayer(layer.id, true);
-      return;
-    }
-
-    const selectedIds = selectedLayerIds.includes(layer.id)
-      ? selectedLayerIds
-      : [layer.id];
-
     setSelectedLayerId(layer.id);
-    setSelectedLayerIds(selectedIds);
-
     markDirty();
     pushHistory();
 
     const scale = getScale();
     const startX = e.clientX;
     const startY = e.clientY;
-
-    const originalPositions = layers
-      .filter((item) => selectedIds.includes(item.id))
-      .reduce<Record<string, { x: number; y: number }>>((acc, item) => {
-        acc[item.id] = { x: item.x, y: item.y };
-        return acc;
-      }, {});
+    const originalX = layer.x;
+    const originalY = layer.y;
 
     function onMove(moveEvent: PointerEvent) {
       const dx = (moveEvent.clientX - startX) / scale;
       const dy = (moveEvent.clientY - startY) / scale;
 
-      setLayers((prev) =>
-        prev.map((item) => {
-          const original = originalPositions[item.id];
-
-          if (!original || item.locked || item.type === "frame") {
-            return item;
-          }
-
-          return {
-            ...item,
-            x: Math.round(original.x + dx),
-            y: Math.round(original.y + dy),
-          };
-        })
+      updateLayer(
+        layer.id,
+        {
+          x: Math.round(originalX + dx),
+          y: Math.round(originalY + dy),
+        },
+        false
       );
     }
 
@@ -681,7 +616,6 @@ export default function EditFramePage() {
 
       if (arrowKeys.includes(e.key) && selectedLayerIds.length) {
         e.preventDefault();
-        markDirty();
 
         setLayers((prev) =>
           prev.map((layer) => {
@@ -721,6 +655,176 @@ export default function EditFramePage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [layers, selectedLayerIds]);
+
+
+
+  async function detectTransparentSlotsFromImage(src: string) {
+    return await new Promise<Layer[]>((resolve) => {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = FRAME_WIDTH;
+        canvas.height = FRAME_HEIGHT;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve([]);
+          return;
+        }
+
+        ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        ctx.drawImage(image, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+        const imageData = ctx.getImageData(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        const data = imageData.data;
+        const step = 8;
+        const cols = Math.ceil(FRAME_WIDTH / step);
+        const rows = Math.ceil(FRAME_HEIGHT / step);
+        const visited = new Uint8Array(cols * rows);
+
+        function isTransparentCell(cx: number, cy: number) {
+          const startX = cx * step;
+          const startY = cy * step;
+          let transparentCount = 0;
+          let total = 0;
+
+          for (let y = startY; y < Math.min(startY + step, FRAME_HEIGHT); y += 2) {
+            for (let x = startX; x < Math.min(startX + step, FRAME_WIDTH); x += 2) {
+              const index = (y * FRAME_WIDTH + x) * 4;
+              const alpha = data[index + 3];
+              if (alpha < 40) transparentCount += 1;
+              total += 1;
+            }
+          }
+
+          return total > 0 && transparentCount / total > 0.75;
+        }
+
+        function key(cx: number, cy: number) {
+          return cy * cols + cx;
+        }
+
+        const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+        for (let cy = 0; cy < rows; cy++) {
+          for (let cx = 0; cx < cols; cx++) {
+            const idx = key(cx, cy);
+            if (visited[idx] || !isTransparentCell(cx, cy)) continue;
+
+            const queue: Array<[number, number]> = [[cx, cy]];
+            visited[idx] = 1;
+
+            let minX = cx;
+            let maxX = cx;
+            let minY = cy;
+            let maxY = cy;
+
+            while (queue.length) {
+              const [qx, qy] = queue.shift()!;
+              minX = Math.min(minX, qx);
+              maxX = Math.max(maxX, qx);
+              minY = Math.min(minY, qy);
+              maxY = Math.max(maxY, qy);
+
+              const neighbors = [
+                [qx + 1, qy],
+                [qx - 1, qy],
+                [qx, qy + 1],
+                [qx, qy - 1],
+              ];
+
+              for (const [nx, ny] of neighbors) {
+                if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+
+                const nKey = key(nx, ny);
+                if (visited[nKey] || !isTransparentCell(nx, ny)) continue;
+
+                visited[nKey] = 1;
+                queue.push([nx, ny]);
+              }
+            }
+
+            const box = {
+              x: minX * step,
+              y: minY * step,
+              width: (maxX - minX + 1) * step,
+              height: (maxY - minY + 1) * step,
+            };
+
+            const area = box.width * box.height;
+            const touchesEdge =
+              box.x <= 16 ||
+              box.y <= 16 ||
+              box.x + box.width >= FRAME_WIDTH - 16 ||
+              box.y + box.height >= FRAME_HEIGHT - 16;
+
+            if (area > 25000 && box.width > 120 && box.height > 120 && !touchesEdge) {
+              boxes.push(box);
+            }
+          }
+        }
+
+        const merged = boxes
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .filter((box, index, arr) => {
+            return !arr.some((other, otherIndex) => {
+              if (otherIndex === index) return false;
+              const inside =
+                box.x >= other.x &&
+                box.y >= other.y &&
+                box.x + box.width <= other.x + other.width &&
+                box.y + box.height <= other.y + other.height;
+              return inside && other.width * other.height > box.width * box.height;
+            });
+          })
+          .slice(0, 12);
+
+        const detectedLayers: Layer[] = merged.map((box, index) => ({
+          id: createId("photo"),
+          type: "photo",
+          name: `Foto ${index + 1}`,
+          photoIndex: index + 1,
+          visible: true,
+          locked: false,
+          x: Math.round(box.x),
+          y: Math.round(box.y),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        }));
+
+        resolve(detectedLayers);
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = src;
+    });
+  }
+
+  async function autoDetectPhotoSlots() {
+    const frameLayer = layers.find((layer) => layer.type === "frame" && layer.src);
+
+    if (!frameLayer?.src) {
+      alert("Upload PNG frame dulu, lalu klik Auto Detect Slot.");
+      return;
+    }
+
+    const detectedLayers = await detectTransparentSlotsFromImage(frameLayer.src);
+
+    if (!detectedLayers.length) {
+      alert("Belum ketemu slot transparan. Pastikan area foto di PNG frame dibuat transparan.");
+      return;
+    }
+
+    setLayersWithHistory((prev) => [
+      ...prev.filter((layer) => layer.type !== "photo"),
+      ...detectedLayers,
+    ]);
+
+    setSelectedLayerIds(detectedLayers.map((layer) => layer.id));
+    setSelectedLayerId(detectedLayers[0]?.id || "");
+  }
 
   function addCategory() {
     const next = newCategoryName.trim().toUpperCase();
@@ -824,6 +928,56 @@ export default function EditFramePage() {
   }
 
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const ctrl = event.ctrlKey || event.metaKey;
+
+      if (ctrl && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+
+        const selectedLayers = layers.filter((layer) =>
+          selectedLayerIds.includes(layer.id)
+        );
+
+        if (selectedLayers.length > 0) {
+          setCopiedLayer(JSON.parse(JSON.stringify(selectedLayers[0])));
+        }
+      }
+
+      if (ctrl && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+
+        if (!copiedLayer) return;
+
+        const duplicatedLayers = selectedLayerIds.length
+          ? layers.filter((layer) => selectedLayerIds.includes(layer.id))
+          : [copiedLayer];
+
+        const pasted = duplicatedLayers.map((layer, index) => ({
+          ...layer,
+          id: createId(layer.type),
+          x: layer.x + 40,
+          y: layer.y + 40,
+          photoIndex:
+            layer.type === "photo"
+              ? (layers.filter((l) => l.type === "photo").length || 0) +
+                index +
+                1
+              : layer.photoIndex,
+        }));
+
+        setLayersWithHistory((prev) => [...prev, ...pasted]);
+        setSelectedLayerIds(pasted.map((item) => item.id));
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [copiedLayer, layers, selectedLayerIds]);
+
   if (isLoading) {
     return (
       <div className="flex h-[70vh] items-center justify-center text-3xl font-black text-slate-400">
@@ -833,7 +987,7 @@ export default function EditFramePage() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#F5F6FA] text-[#101828]">
+    <div className="relative text-[#101828]">
       {showSavedToast && (
         <div className="fixed left-1/2 top-8 z-[2000] -translate-x-1/2 rounded-full bg-green-100 px-8 py-4 text-xl font-black text-green-700 shadow-xl">
           Frame berhasil disimpan
@@ -867,78 +1021,64 @@ export default function EditFramePage() {
         </div>
       )}
 
-      <div className="grid h-screen grid-cols-[240px_minmax(360px,1fr)_360px_360px] gap-6 p-5">
-        <aside className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4263FF] text-2xl text-white">
-                📸
-              </div>
-              <div>
-                <h2 className="text-xl font-black">Miori Booth</h2>
-                <p className="text-xs font-bold text-slate-400">Frame Admin</p>
-              </div>
-            </div>
+      <div className="flex items-center justify-between rounded-[36px] bg-white p-7 shadow-xl">
+        <div>
+          <h1 className="text-4xl font-black">Frame Editor Pro</h1>
+          <p className="mt-2 font-semibold text-slate-500">
+            Editor website dengan fitur layer lengkap dan sinkron ke Electron.
+          </p>
+          <p className={`mt-2 text-sm font-black ${isDirty ? "text-red-500" : "text-green-600"}`}>
+            {isDirty ? "● Belum Disimpan" : "● Tersimpan"}
+          </p>
+        </div>
 
-            <div className="mt-8 space-y-2">
-              <button
-                onClick={leavePage}
-                className="flex h-12 w-full items-center rounded-2xl px-4 text-left font-black text-slate-500 hover:bg-[#F6F7FF]"
-              >
-                ← Library
-              </button>
-              <button className="flex h-12 w-full items-center rounded-2xl bg-[#4263FF] px-4 text-left font-black text-white">
-                Frame Editor
-              </button>
-              <button
-                onClick={saveFrame}
-                disabled={isSaving}
-                className="flex h-12 w-full items-center rounded-2xl bg-green-50 px-4 text-left font-black text-green-700 disabled:opacity-50"
-              >
-                {isSaving ? "Menyimpan..." : "Simpan Frame"}
-              </button>
-              <button
-                onClick={deleteFrame}
-                className="flex h-12 w-full items-center rounded-2xl bg-red-50 px-4 text-left font-black text-red-500"
-              >
-                Hapus Frame
-              </button>
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={leavePage}
+            className="h-[58px] rounded-full bg-[#F6F7FF] px-6 font-black text-[#4263FF]"
+          >
+            ← LIBRARY
+          </button>
 
-          <div className="mt-auto rounded-3xl bg-[#F6F7FF] p-4">
-            <p className="text-xs font-black uppercase text-slate-400">Status</p>
-            <p className={`mt-2 text-sm font-black ${isDirty ? "text-red-500" : "text-green-600"}`}>
-              {isDirty ? "● Belum Disimpan" : "● Tersimpan"}
-            </p>
-            <p className="mt-3 text-xs font-bold leading-relaxed text-slate-400">
-              Shortcut: Ctrl + klik untuk multi select, Ctrl+C, Ctrl+V, Delete, Arrow.
-            </p>
-          </div>
-        </aside>
+          <button
+            onClick={undo}
+            className="h-[58px] rounded-full border-2 border-[#4263FF] px-6 font-black text-[#4263FF]"
+          >
+            UNDO
+          </button>
 
-        <section className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <div>
-              <h1 className="text-2xl font-black">Workspace 4R</h1>
-              <p className="mt-1 text-sm font-bold text-slate-400">Canvas 1200 × 1800 px</p>
-            </div>
+          <button
+            onClick={redo}
+            className="h-[58px] rounded-full border-2 border-[#4263FF] px-6 font-black text-[#4263FF]"
+          >
+            REDO
+          </button>
 
-            <div className="flex gap-2">
-              <button onClick={undo} className="h-11 rounded-2xl bg-[#F6F7FF] px-4 font-black text-slate-600">UNDO</button>
-              <button onClick={redo} className="h-11 rounded-2xl bg-[#F6F7FF] px-4 font-black text-slate-600">REDO</button>
-            </div>
-          </div>
+          <button
+            onClick={deleteFrame}
+            className="h-[58px] rounded-full bg-red-50 px-6 font-black text-red-500"
+          >
+            DELETE
+          </button>
 
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#EAEDF5] p-8">
+          <button
+            onClick={saveFrame}
+            disabled={isSaving}
+            className="h-[58px] rounded-full bg-[#4263FF] px-8 font-black text-white disabled:opacity-50"
+          >
+            {isSaving ? "MENYIMPAN..." : "SIMPAN"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 flex gap-6 h-[calc(100vh-170px)] overflow-hidden">
+        <div className="flex-1 rounded-[36px] bg-white p-7 shadow-xl overflow-hidden">
+          <div className="flex h-full items-center justify-center rounded-[30px] bg-[#D9DDEB] p-8 overflow-auto">
             <div
               ref={frameRef}
-              className="relative h-full max-h-[calc(100vh-170px)] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
+              className="relative h-[82vh] max-h-[980px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
-              onClick={() => {
-                setSelectedLayerId("");
-                setSelectedLayerIds([]);
-              }}
+              onClick={() => setSelectedLayerId("")}
             >
               {layers.map((layer) => {
                 if (!layer.visible) return null;
@@ -950,7 +1090,7 @@ export default function EditFramePage() {
                       src={layer.src}
                       alt="Frame"
                       draggable={false}
-                      className="pointer-events-none absolute select-none object-cover"
+                      className="absolute object-cover pointer-events-none select-none"
                       style={{
                         left: `${(layer.x / FRAME_WIDTH) * 100}%`,
                         top: `${(layer.y / FRAME_HEIGHT) * 100}%`,
@@ -968,10 +1108,24 @@ export default function EditFramePage() {
                   <div
                     key={layer.id}
                     onPointerDown={(e) => startDrag(e, layer)}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+
+                      if (e.shiftKey) {
+                        setSelectedLayerIds((prev) =>
+                          prev.includes(layer.id)
+                            ? prev.filter((id) => id !== layer.id)
+                            : [...prev, layer.id]
+                        );
+                      } else {
+                        setSelectedLayerIds([layer.id]);
+                      }
+
+                      setSelectedLayerId(layer.id);
+                    }}
                     className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
                       layer.locked ? "cursor-not-allowed" : "cursor-move"
-                    } ${selected ? "outline outline-[5px] outline-[#4263FF]" : ""}`}
+                    } ${selected ? "outline outline-[5px] outline-slate-950" : ""}`}
                     style={{
                       backgroundColor: color.bg,
                       borderColor: color.border,
@@ -987,7 +1141,7 @@ export default function EditFramePage() {
                     {selected && !layer.locked && (
                       <div
                         onPointerDown={(e) => startResize(e, layer)}
-                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-[#4263FF] bg-white"
+                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-slate-950 bg-white"
                       />
                     )}
                   </div>
@@ -995,16 +1149,24 @@ export default function EditFramePage() {
               })}
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3 text-sm font-black text-slate-400">
-            <span>Selected: {selectedLayerIds.length}</span>
-            <span>W: {FRAME_WIDTH} &nbsp; H: {FRAME_HEIGHT}</span>
-          </div>
-        </section>
+        <div className={`${showRightPanel ? "w-[420px]" : "w-[76px]"} transition-all duration-300 flex-shrink-0`}>
+          <div className="sticky top-0 h-full">
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={() => setShowRightPanel((prev) => !prev)}
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4263FF] text-3xl font-black text-white shadow-lg"
+              >
+                {showRightPanel ? "→" : "←"}
+              </button>
+            </div>
 
-        <section className="flex min-h-0 flex-col gap-5 overflow-y-auto">
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-black uppercase">Frame Info</h2>
+            {showRightPanel && (
+              <div className="h-[calc(100vh-240px)] overflow-y-auto space-y-5 pr-2">
+
+          <div className="rounded-[30px] bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-black">Frame Info</h2>
 
             <input
               value={name}
@@ -1013,31 +1175,38 @@ export default function EditFramePage() {
                 setIsDirty(true);
               }}
               placeholder="Nama frame"
-              className="mt-5 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+              className="mt-5 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
             />
 
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
               <select
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
                   setIsDirty(true);
                 }}
-                className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+                className="h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
               >
                 {categories.map((item) => (
-                  <option key={item} value={item}>{item}</option>
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
                 ))}
               </select>
 
-              <button onClick={addCategory} className="h-12 rounded-2xl bg-[#4263FF] px-4 font-black text-white">+</button>
+              <button
+                onClick={addCategory}
+                className="h-14 rounded-2xl bg-[#4263FF] px-4 font-black text-white"
+              >
+                +
+              </button>
             </div>
 
             <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="Kategori baru"
-              className="mt-3 h-11 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
             />
 
             <select
@@ -1046,7 +1215,7 @@ export default function EditFramePage() {
                 setLayoutType(e.target.value as LayoutType);
                 setIsDirty(true);
               }}
-              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
             >
               <option value="PHOTO_STRIP">2R / Photo Strip</option>
               <option value="4R">4R</option>
@@ -1058,7 +1227,7 @@ export default function EditFramePage() {
                 setBackgroundColor(e.target.value);
                 setIsDirty(true);
               }}
-              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
             />
 
             <button
@@ -1066,7 +1235,7 @@ export default function EditFramePage() {
                 setIsActive((prev) => !prev);
                 setIsDirty(true);
               }}
-              className={`mt-3 h-12 w-full rounded-full font-black ${
+              className={`mt-4 h-14 w-full rounded-full font-black ${
                 isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
               }`}
             >
@@ -1074,13 +1243,99 @@ export default function EditFramePage() {
             </button>
           </div>
 
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-black uppercase">Tools</h2>
+          <div className="rounded-[30px] bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-black">Layers</h2>
+
+            <div className="mt-4 max-h-[340px] space-y-2 overflow-y-auto">
+              {[...layers].reverse().map((layer) => (
+                <div
+                  key={layer.id}
+                  draggable
+                  onDragStart={() => {
+                    dragLayerRef.current = layer.id;
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragLayerRef.current) {
+                      moveLayer(dragLayerRef.current, layer.id);
+                    }
+                  }}
+                  onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            setSelectedLayerIds((prev) =>
+                              prev.includes(layer.id)
+                                ? prev.filter((id) => id !== layer.id)
+                                : [...prev, layer.id]
+                            );
+                          } else {
+                            setSelectedLayerIds([layer.id]);
+                          }
+
+                          setSelectedLayerId(layer.id);
+                        }}
+                  className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
+                    selectedLayerId === layer.id
+                      ? "bg-[#4263FF] text-white"
+                      : "bg-[#F6F7FF] text-slate-600"
+                  }`}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleVisible(layer.id);
+                    }}
+                    className="text-lg"
+                  >
+                    {layer.visible ? "👁" : "🚫"}
+                  </button>
+
+                  <span className="flex-1">
+                    {layer.name}
+                    {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLock(layer.id);
+                    }}
+                    className="text-lg"
+                  >
+                    {layer.locked ? "🔒" : "🔓"}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                onClick={sendBackward}
+                className="h-11 rounded-full bg-[#F6F7FF] font-black"
+              >
+                SEND BACK
+              </button>
+
+              <button
+                onClick={bringForward}
+                className="h-11 rounded-full bg-[#F6F7FF] font-black"
+              >
+                BRING FRONT
+              </button>
+            </div>
+          </div>
+
+<div className="rounded-[30px] bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-black">Tools</h2>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button onClick={addPhotoSlot} className="h-12 rounded-2xl bg-[#4263FF] font-black text-white">+ PHOTO</button>
+              <button
+                onClick={addPhotoSlot}
+                className="h-12 rounded-full bg-[#4263FF] font-black text-white"
+              >
+                + PHOTO
+              </button>
 
-              <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-[#FF7BC3] font-black text-white">
+              <label className="flex h-12 cursor-pointer items-center justify-center rounded-full bg-[#FF7BC3] font-black text-white">
                 {isUploadingFrame ? "UP..." : "PNG"}
                 <input
                   type="file"
@@ -1090,10 +1345,40 @@ export default function EditFramePage() {
                 />
               </label>
 
-              <button onClick={copyLayer} className="h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">COPY</button>
-              <button onClick={pasteLayer} className="h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">PASTE</button>
-              <button onClick={duplicateSelectedLayer} className="col-span-2 h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">DUPLICATE</button>
-              <button onClick={renumberPhotoLayers} className="col-span-2 h-12 rounded-2xl bg-[#F3EEFF] font-black text-[#7657FF]">AUTO RENUMBER FOTO</button>
+              <button
+                onClick={autoDetectPhotoSlots}
+                className="col-span-2 h-12 rounded-full bg-[#22C55E] font-black text-white"
+              >
+                AUTO DETECT SLOT
+              </button>
+
+              <button
+                onClick={copyLayer}
+                className="h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
+              >
+                COPY
+              </button>
+
+              <button
+                onClick={pasteLayer}
+                className="h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
+              >
+                PASTE
+              </button>
+
+              <button
+                onClick={duplicateSelectedLayer}
+                className="col-span-2 h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
+              >
+                DUPLICATE
+              </button>
+
+              <button
+                onClick={renumberPhotoLayers}
+                className="col-span-2 h-12 rounded-full bg-[#F3EEFF] font-black text-[#7657FF]"
+              >
+                AUTO RENUMBER FOTO
+              </button>
             </div>
 
             <button
@@ -1106,21 +1391,25 @@ export default function EditFramePage() {
             </button>
           </div>
 
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-black uppercase">Selected Layer</h2>
+          <div className="rounded-[30px] bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-black">Selected Layer</h2>
 
             {selectedLayer ? (
               <div className="mt-5 grid grid-cols-2 gap-3">
                 {(["x", "y", "width", "height"] as const).map((key) => (
                   <div key={key}>
-                    <p className="mb-1 text-xs font-black text-slate-400">{key.toUpperCase()}</p>
+                    <p className="mb-1 text-xs font-black text-slate-400">
+                      {key.toUpperCase()}
+                    </p>
                     <input
                       type="number"
                       value={Math.round(selectedLayer[key] || 0)}
                       onChange={(e) =>
-                        updateSelectedLayer({ [key]: Number(e.target.value) } as Partial<Layer>)
+                        updateSelectedLayer({
+                          [key]: Number(e.target.value),
+                        } as Partial<Layer>)
                       }
-                      className="h-11 w-full rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none"
+                      className="h-12 w-full rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
                     />
                   </div>
                 ))}
@@ -1135,7 +1424,7 @@ export default function EditFramePage() {
                         name: `Foto ${Number(e.target.value || 1)}`,
                       })
                     }
-                    className="col-span-2 h-11 rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none"
+                    className="col-span-2 h-12 rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
                   />
                 )}
 
@@ -1155,81 +1444,25 @@ export default function EditFramePage() {
                   <button onClick={() => shiftAll("y", 10)} className="h-10 rounded-xl bg-[#EEF1FF] font-black">↓</button>
                 </div>
 
-                <button onClick={deleteSelectedLayer} className="col-span-2 h-12 rounded-full bg-red-50 font-black text-red-500">HAPUS LAYER</button>
+                <button
+                  onClick={deleteSelectedLayer}
+                  className="col-span-2 h-12 rounded-full bg-red-50 font-black text-red-500"
+                >
+                  HAPUS LAYER
+                </button>
               </div>
             ) : (
-              <p className="mt-5 font-bold text-slate-400">Pilih slot foto dulu.</p>
+              <p className="mt-5 font-bold text-slate-400">
+                Pilih slot foto dulu.
+              </p>
             )}
           </div>
-        </section>
 
-        <section className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-            <div>
-              <h2 className="text-xl font-black uppercase">Layer</h2>
-              <p className="mt-1 text-xs font-bold text-slate-400">Drag layer untuk ubah urutan</p>
-            </div>
-            <div className="rounded-full bg-[#F6F7FF] px-3 py-1 text-xs font-black text-slate-500">
-              {layers.length}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-            {[...layers].reverse().map((layer) => (
-              <div
-                key={layer.id}
-                draggable
-                onDragStart={() => {
-                  dragLayerRef.current = layer.id;
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  if (dragLayerRef.current) moveLayer(dragLayerRef.current, layer.id);
-                }}
-                onClick={(e) => selectLayer(layer.id, e.ctrlKey || e.metaKey || e.shiftKey)}
-                className={`flex w-full cursor-grab items-center gap-3 rounded-2xl border px-4 py-3 text-left font-black transition ${
-                  selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id
-                    ? "border-[#4263FF] bg-[#EEF1FF] text-[#4263FF]"
-                    : "border-slate-100 bg-[#F8FAFC] text-slate-600 hover:bg-[#F6F7FF]"
-                }`}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleVisible(layer.id);
-                  }}
-                  className="text-lg"
-                >
-                  {layer.visible ? "👁" : "🚫"}
-                </button>
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xs shadow-sm">
-                  {layer.type === "photo" ? `#${layer.photoIndex}` : "PNG"}
-                </div>
-
-                <span className="min-w-0 flex-1 truncate">
-                  {layer.name}
-                  {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
-                </span>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleLock(layer.id);
-                  }}
-                  className="text-lg"
-                >
-                  {layer.locked ? "🔒" : "🔓"}
-                </button>
+          
               </div>
-            ))}
+            )}
           </div>
-
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 p-5">
-            <button onClick={sendBackward} className="h-11 rounded-full bg-[#F6F7FF] font-black text-slate-600">SEND BACK</button>
-            <button onClick={bringForward} className="h-11 rounded-full bg-[#F6F7FF] font-black text-slate-600">BRING FRONT</button>
-          </div>
-        </section>
+        </div>
       </div>
     </div>
   );
