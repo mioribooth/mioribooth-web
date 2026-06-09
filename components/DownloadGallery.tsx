@@ -32,7 +32,7 @@ function getFileExtension(url: string, fallback: string) {
   }
 }
 
-async function forceDownload(url: string, filename: string) {
+async function forceDownload(url: string, filename: string, mirror = false) {
   if (!url) return;
 
   try {
@@ -46,6 +46,45 @@ async function forceDownload(url: string, filename: string) {
     }
 
     const blob = await response.blob();
+
+    if (mirror && blob.type.startsWith("image/") && !blob.type.includes("gif")) {
+      const imageBitmap = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = imageBitmap.width;
+      canvas.height = imageBitmap.height;
+
+      const ctx = canvas.getContext("2d");
+
+      if (ctx) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(imageBitmap, 0, 0);
+      }
+
+      const mirroredBlob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, blob.type || "image/jpeg", 1)
+      );
+
+      if (mirroredBlob) {
+        const mirroredUrl = URL.createObjectURL(mirroredBlob);
+        const mirroredAnchor = document.createElement("a");
+
+        mirroredAnchor.href = mirroredUrl;
+        mirroredAnchor.download = filename;
+        mirroredAnchor.style.display = "none";
+
+        document.body.appendChild(mirroredAnchor);
+        mirroredAnchor.click();
+        mirroredAnchor.remove();
+
+        window.setTimeout(() => {
+          URL.revokeObjectURL(mirroredUrl);
+        }, 1000);
+
+        return;
+      }
+    }
+
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
@@ -138,17 +177,19 @@ export default function DownloadGallery({
     url,
     label,
     fallbackExtension,
+    mirror = false,
   }: {
     url: string;
     label: string;
     fallbackExtension: string;
+    mirror?: boolean;
   }) {
     return (
       <button
         type="button"
         onClick={() => {
           const ext = getFileExtension(url, fallbackExtension);
-          void forceDownload(url, `${sessionId}-${label}.${ext}`);
+          void forceDownload(url, `${sessionId}-${label}.${ext}`, mirror);
         }}
         className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] text-sm font-black text-white"
       >
@@ -205,6 +246,7 @@ export default function DownloadGallery({
             url={selectedPhoto}
             label={`Foto-${activeSingleIndex + 1}`}
             fallbackExtension="jpg"
+            mirror={mirror}
           />
         </div>
 
@@ -246,7 +288,7 @@ export default function DownloadGallery({
           }}
         />
 
-        <DownloadButton url={gif} label="GIF" fallbackExtension="gif" />
+        <DownloadButton url={gif} label="GIF" fallbackExtension="gif" mirror={mirror} />
       </div>
     );
   }
