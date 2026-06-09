@@ -38,9 +38,16 @@ export default function DeleteFrameButton({ frameId }: { frameId: string }) {
     <button
       onClick={deleteFrame}
       disabled={isDeleting}
-      className="flex-1 rounded-full bg-[#FFF0F0] py-3 text-sm font-black text-red-500 disabled:opacity-50"
+      className="flex-1 rounded-full bg-[#FFF0F0] py-3 text-sm font-black text-red-500 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
     >
-      {isDeleting ? "..." : "DELETE"}
+      {isDeleting ? (
+        <span className="inline-flex items-center justify-center gap-2">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />
+          HAPUS...
+        </span>
+      ) : (
+        "DELETE"
+      )}
     </button>
   );
 }
