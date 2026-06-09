@@ -565,18 +565,27 @@ export default function CreateFramePage() {
           .sort((a, b) => a.y - b.y || a.x - b.x)
           .slice(0, 12);
 
-        const detectedLayers: Layer[] = detectedBoxes.map((box, index) => ({
-          id: createId("photo"),
-          type: "photo",
-          name: `Photo ${index + 1}`,
-          photoIndex: index + 1,
-          visible: true,
-          locked: false,
-          x: Math.round(box.x),
-          y: Math.round(box.y),
-          width: Math.round(box.width),
-          height: Math.round(box.height),
-        }));
+        const SLOT_BLEED = 16;
+
+        const detectedLayers: Layer[] = detectedBoxes.map((box, index) => {
+          const x = Math.max(0, box.x - SLOT_BLEED);
+          const y = Math.max(0, box.y - SLOT_BLEED);
+          const right = Math.min(FRAME_WIDTH, box.x + box.width + SLOT_BLEED);
+          const bottom = Math.min(FRAME_HEIGHT, box.y + box.height + SLOT_BLEED);
+
+          return {
+            id: createId("photo"),
+            type: "photo",
+            name: `Photo ${index + 1}`,
+            photoIndex: index + 1,
+            visible: true,
+            locked: false,
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.round(right - x),
+            height: Math.round(bottom - y),
+          };
+        });
 
         resolve(detectedLayers);
       };
