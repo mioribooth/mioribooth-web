@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type LayoutType = "PHOTO_STRIP" | "4R";
@@ -67,6 +67,8 @@ export default function CreateFramePage() {
   const [frameDetectSource, setFrameDetectSource] = useState("");
   const [layers, setLayers] = useState<Layer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState("");
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
+  const [copiedLayers, setCopiedLayers] = useState<Layer[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingFrame, setIsUploadingFrame] = useState(false);
   const [keepAspectRatio, setKeepAspectRatio] = useState(true);
@@ -75,6 +77,12 @@ export default function CreateFramePage() {
     () => layers.find((layer) => layer.id === selectedLayerId),
     [layers, selectedLayerId]
   );
+
+  const orderedLayers = useMemo(() => {
+    const photoLayers = layers.filter((layer) => layer.type !== "frame");
+    const frameLayers = layers.filter((layer) => layer.type === "frame");
+    return [...photoLayers, ...frameLayers];
+  }, [layers]);
 
   const photoCount = layers.filter((layer) => layer.type === "photo").length;
 
@@ -124,10 +132,11 @@ export default function CreateFramePage() {
       setThumbnail(result.url);
       setFrameDetectSource(dataUrl);
       setLayers((prev) => [
-        frameLayer,
         ...prev.filter((layer) => layer.type !== "frame"),
+        frameLayer,
       ]);
       setSelectedLayerId(frameLayer.id);
+      setSelectedLayerIds([frameLayer.id]);
     } catch (error) {
       console.error("UPLOAD_FRAME_IMAGE_ERROR:", error);
       alert("Gagal upload PNG frame.");
@@ -155,8 +164,13 @@ export default function CreateFramePage() {
       height: 460 / CAMERA_RATIO,
     };
 
-    setLayers((prev) => [...prev, newLayer]);
+    setLayers((prev) => [
+      ...prev.filter((layer) => layer.type !== "frame"),
+      newLayer,
+      ...prev.filter((layer) => layer.type === "frame"),
+    ]);
     setSelectedLayerId(newLayer.id);
+    setSelectedLayerIds([newLayer.id]);
   }
 
   function updateLayer(layerId: string, data: Partial<Layer>) {
@@ -171,29 +185,120 @@ export default function CreateFramePage() {
   }
 
   function deleteSelectedLayer() {
-    if (!selectedLayer) return;
-    setLayers((prev) => prev.filter((layer) => layer.id !== selectedLayer.id));
+    const idsToDelete = selectedLayerIds.length
+      ? selectedLayerIds
+      : selectedLayer
+        ? [selectedLayer.id]
+        : [];
+
+    if (!idsToDelete.length) return;
+
+    setLayers((prev) => prev.filter((layer) => !idsToDelete.includes(layer.id)));
     setSelectedLayerId("");
+    setSelectedLayerIds([]);
   }
 
   function duplicateSelectedLayer() {
-    if (!selectedLayer) return;
+    const selected = layers.filter((layer) =>
+      selectedLayerIds.length
+        ? selectedLayerIds.includes(layer.id)
+        : selectedLayer?.id === layer.id
+    );
 
-    const copy: Layer = {
-      ...selectedLayer,
-      id: createId(selectedLayer.type),
-      name:
-        selectedLayer.type === "photo"
-          ? `Photo ${photoCount + 1}`
-          : `${selectedLayer.name} Copy`,
-      photoIndex: selectedLayer.type === "photo" ? photoCount + 1 : selectedLayer.photoIndex,
-      x: selectedLayer.x + 40,
-      y: selectedLayer.y + 40,
-      locked: selectedLayer.type === "frame" ? true : selectedLayer.locked,
-    };
+    if (!selected.length) return;
 
-    setLayers((prev) => [...prev, copy]);
-    setSelectedLayerId(copy.id);
+    let nextPhotoIndex = photoCount + 1;
+
+    const copies: Layer[] = selected.map((layer) => {
+      const isPhoto = layer.type === "photo";
+      const copy: Layer = {
+        ...layer,
+        id: createId(layer.type),
+        name: isPhoto ? `Photo ${nextPhotoIndex}` : `${layer.name} Copy`,
+        photoIndex: isPhoto ? nextPhotoIndex : layer.photoIndex,
+        x: layer.x + 40,
+        y: layer.y + 40,
+        locked: layer.type === "frame" ? true : layer.locked,
+      };
+
+      if (isPhoto) nextPhotoIndex += 1;
+      return copy;
+    });
+
+    setLayers((prev) => [
+      ...prev.filter((layer) => layer.type !== "frame"),
+      ...copies.filter((layer) => layer.type !== "frame"),
+      ...prev.filter((layer) => layer.type === "frame"),
+      ...copies.filter((layer) => layer.type === "frame"),
+    ]);
+    setSelectedLayerId(copies[0]?.id || "");
+    setSelectedLayerIds(copies.map((layer) => layer.id));
+  }
+
+  function copyLayer() {
+    const selected = layers.filter((layer) =>
+      selectedLayerIds.length
+        ? selectedLayerIds.includes(layer.id)
+        : selectedLayer?.id === layer.id
+    );
+
+    if (!selected.length) return;
+
+    const cloned = JSON.parse(JSON.stringify(selected)) as Layer[];
+    setCopiedLayers(cloned);
+    localStorage.setItem("miori-create-multi-copy", JSON.stringify(cloned));
+  }
+
+  function pasteLayer() {
+    const raw = localStorage.getItem("miori-create-multi-copy");
+    const copied: Layer[] = raw
+      ? JSON.parse(raw)
+      : copiedLayers;
+
+    if (!copied.length) return;
+
+    let nextPhotoIndex = photoCount + 1;
+
+    const pasted = copied.map((layer) => {
+      const isPhoto = layer.type === "photo";
+      const nextLayer: Layer = {
+        ...layer,
+        id: createId(layer.type),
+        name: isPhoto ? `Photo ${nextPhotoIndex}` : `${layer.name} Copy`,
+        photoIndex: isPhoto ? nextPhotoIndex : layer.photoIndex,
+        x: layer.x + 40,
+        y: layer.y + 40,
+        visible: true,
+        locked: layer.type === "frame" ? true : false,
+      };
+
+      if (isPhoto) nextPhotoIndex += 1;
+      return nextLayer;
+    });
+
+    setLayers((prev) => [
+      ...prev.filter((layer) => layer.type !== "frame"),
+      ...pasted.filter((layer) => layer.type !== "frame"),
+      ...prev.filter((layer) => layer.type === "frame"),
+      ...pasted.filter((layer) => layer.type === "frame"),
+    ]);
+
+    setSelectedLayerId(pasted[0]?.id || "");
+    setSelectedLayerIds(pasted.map((layer) => layer.id));
+  }
+
+  function selectLayer(layerId: string, multi = false) {
+    setSelectedLayerIds((prev) => {
+      if (multi) {
+        return prev.includes(layerId)
+          ? prev.filter((id) => id !== layerId)
+          : [...prev, layerId];
+      }
+
+      return [layerId];
+    });
+
+    setSelectedLayerId(layerId);
   }
 
   function toggleVisible(layerId: string) {
@@ -210,23 +315,54 @@ export default function CreateFramePage() {
 
   function startDrag(e: React.PointerEvent, layer: Layer) {
     if (layer.locked || layer.type === "frame") return;
+
     e.preventDefault();
     e.stopPropagation();
+
+    const isMultiSelect = e.ctrlKey || e.metaKey || e.shiftKey;
+
+    if (isMultiSelect) {
+      selectLayer(layer.id, true);
+      return;
+    }
+
+    const activeSelection = selectedLayerIds.includes(layer.id)
+      ? selectedLayerIds
+      : [layer.id];
+
     setSelectedLayerId(layer.id);
+    setSelectedLayerIds(activeSelection);
 
     const scale = getScale();
     const startX = e.clientX;
     const startY = e.clientY;
-    const originalX = layer.x;
-    const originalY = layer.y;
+
+    const originalPositions = layers
+      .filter((item) => activeSelection.includes(item.id))
+      .reduce<Record<string, { x: number; y: number }>>((acc, item) => {
+        acc[item.id] = { x: item.x, y: item.y };
+        return acc;
+      }, {});
 
     function onMove(moveEvent: PointerEvent) {
       const dx = (moveEvent.clientX - startX) / scale;
       const dy = (moveEvent.clientY - startY) / scale;
-      updateLayer(layer.id, {
-        x: Math.round(originalX + dx),
-        y: Math.round(originalY + dy),
-      });
+
+      setLayers((prev) =>
+        prev.map((item) => {
+          const original = originalPositions[item.id];
+
+          if (!original || item.locked || item.type === "frame") {
+            return item;
+          }
+
+          return {
+            ...item,
+            x: Math.round(original.x + dx),
+            y: Math.round(original.y + dy),
+          };
+        })
+      );
     }
 
     function onUp() {
@@ -468,12 +604,78 @@ export default function CreateFramePage() {
     }
 
     setLayers((prev) => [
-      ...prev.filter((layer) => layer.type !== "photo"),
+      ...prev.filter((layer) => layer.type !== "photo" && layer.type !== "frame"),
       ...detectedLayers,
+      ...prev.filter((layer) => layer.type === "frame"),
     ]);
 
     setSelectedLayerId(detectedLayers[0]?.id || "");
+    setSelectedLayerIds(detectedLayers.map((layer) => layer.id));
   }
+
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      const isTyping =
+        activeTag === "INPUT" ||
+        activeTag === "TEXTAREA" ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+
+      if (isTyping) return;
+
+      const step = e.shiftKey ? 10 : 1;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        copyLayer();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        pasteLayer();
+        return;
+      }
+
+      if (e.key === "Delete") {
+        e.preventDefault();
+        deleteSelectedLayer();
+        return;
+      }
+
+      const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+      if (arrowKeys.includes(e.key) && selectedLayerIds.length) {
+        e.preventDefault();
+
+        setLayers((prev) =>
+          prev.map((layer) => {
+            if (
+              !selectedLayerIds.includes(layer.id) ||
+              layer.locked ||
+              layer.type === "frame"
+            ) {
+              return layer;
+            }
+
+            if (e.key === "ArrowUp") return { ...layer, y: layer.y - step };
+            if (e.key === "ArrowDown") return { ...layer, y: layer.y + step };
+            if (e.key === "ArrowLeft") return { ...layer, x: layer.x - step };
+            if (e.key === "ArrowRight") return { ...layer, x: layer.x + step };
+
+            return layer;
+          })
+        );
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [layers, selectedLayerIds, copiedLayers, selectedLayer]);
 
   async function saveFrame() {
     if (isUploadingFrame) {
@@ -499,7 +701,7 @@ export default function CreateFramePage() {
           backgroundColor,
           thumbnail,
           isActive: true,
-          layers: layers.map((layer, index) => ({ ...layer, zIndex: index })),
+          layers: orderedLayers.map((layer, index) => ({ ...layer, zIndex: index })),
         }),
       });
 
@@ -568,11 +770,11 @@ export default function CreateFramePage() {
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#EEF1F7] p-8">
             <div
               ref={frameRef}
-              onClick={() => setSelectedLayerId("")}
+              onClick={() => { setSelectedLayerId(""); setSelectedLayerIds([]); }}
               className="relative aspect-[2/3] h-[78vh] max-h-[900px] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
             >
-              {layers.map((layer) => {
+              {orderedLayers.map((layer) => {
                 if (!layer.visible) return null;
 
                 if (layer.type === "frame") {
@@ -594,15 +796,12 @@ export default function CreateFramePage() {
                 }
 
                 const color = getPhotoColor(layer.photoIndex);
-                const selected = selectedLayerId === layer.id;
+                const selected = selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id;
 
                 return (
                   <div
                     key={layer.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedLayerId(layer.id);
-                    }}
+                    onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => startDrag(e, layer)}
                     className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
                       layer.locked ? "cursor-not-allowed" : "cursor-move"
@@ -663,9 +862,11 @@ export default function CreateFramePage() {
                 <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => uploadFrameImage(e.target.files?.[0] || null)} />
               </label>
               <button onClick={autoDetectPhotoSlots} className="col-span-2 h-16 rounded-2xl bg-[#22C55E] font-black text-white">Auto Detect Slot</button>
-              <button onClick={duplicateSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Duplicate</button>
-              <button onClick={deleteSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-red-50 font-black text-red-500 disabled:opacity-40">Delete</button>
-              <button onClick={() => selectedLayer && toggleLock(selectedLayer.id)} disabled={!selectedLayer || selectedLayer.type === "frame"} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Lock</button>
+              <button onClick={copyLayer} disabled={!selectedLayerIds.length && !selectedLayer} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Copy</button>
+              <button onClick={pasteLayer} disabled={!copiedLayers.length} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Paste</button>
+              <button onClick={duplicateSelectedLayer} disabled={!selectedLayerIds.length && !selectedLayer} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Duplicate</button>
+              <button onClick={deleteSelectedLayer} disabled={!selectedLayerIds.length && !selectedLayer} className="h-16 rounded-2xl bg-red-50 font-black text-red-500 disabled:opacity-40">Delete</button>
+              <button onClick={() => selectedLayer && toggleLock(selectedLayer.id)} disabled={!selectedLayer || selectedLayer.type === "frame"} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">{selectedLayer?.locked ? "Unlock" : "Lock"}</button>
               <button onClick={() => setKeepAspectRatio((prev) => !prev)} className={`h-16 rounded-2xl font-black ${keepAspectRatio ? "bg-[#4263FF] text-white" : "bg-[#F6F7FF] text-slate-600"}`}>Aspect</button>
             </div>
           </div>
@@ -687,7 +888,46 @@ export default function CreateFramePage() {
                   ))}
                 </div>
                 {selectedLayer.type === "photo" && (
-                  <input type="number" value={selectedLayer.photoIndex || 1} onChange={(e) => updateSelectedLayer({ photoIndex: Number(e.target.value || 1), name: `Photo ${Number(e.target.value || 1)}` })} className="h-11 w-full rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none" />
+                  <div className="rounded-2xl bg-[#F6F7FF] p-4">
+                    <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                      Nomor Slot Foto
+                    </p>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={selectedLayer.photoIndex || 1}
+                      onChange={(e) => {
+                        const nextIndex = Math.max(1, Number(e.target.value || 1));
+                        updateSelectedLayer({
+                          photoIndex: nextIndex,
+                          name: `Photo ${nextIndex}`,
+                        });
+                      }}
+                      className="h-12 w-full rounded-xl bg-white px-4 text-lg font-black outline-none"
+                    />
+                    <div className="mt-3 grid grid-cols-6 gap-2">
+                      {[1, 2, 3, 4, 5, 6].map((slotNumber) => (
+                        <button
+                          key={slotNumber}
+                          type="button"
+                          onClick={() =>
+                            updateSelectedLayer({
+                              photoIndex: slotNumber,
+                              name: `Photo ${slotNumber}`,
+                            })
+                          }
+                          className={`h-9 rounded-xl text-sm font-black ${
+                            selectedLayer.photoIndex === slotNumber
+                              ? "bg-[#4263FF] text-white"
+                              : "bg-white text-slate-500"
+                          }`}
+                        >
+                          {slotNumber}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (
@@ -699,15 +939,15 @@ export default function CreateFramePage() {
         <section className="flex min-w-0 flex-col rounded-[32px] bg-white shadow-xl">
           <div className="flex h-[76px] items-center justify-between border-b border-slate-100 px-5">
             <h2 className="text-lg font-black">LAYER ({layers.length})</h2>
-            <button onClick={deleteSelectedLayer} disabled={!selectedLayer} className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-500 disabled:opacity-40">🗑</button>
+            <button onClick={deleteSelectedLayer} disabled={!selectedLayerIds.length && !selectedLayer} className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-500 disabled:opacity-40">🗑</button>
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-            {[...layers].reverse().map((layer) => {
-              const active = selectedLayerId === layer.id;
+            {[...orderedLayers].reverse().map((layer) => {
+              const active = selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id;
               return (
                 <button
                   key={layer.id}
-                  onClick={() => setSelectedLayerId(layer.id)}
+                  onClick={(e) => selectLayer(layer.id, e.ctrlKey || e.metaKey || e.shiftKey)}
                   className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left font-black transition ${
                     active ? "border-[#4263FF] bg-[#EEF1FF] text-[#4263FF]" : "border-slate-100 bg-white text-slate-600"
                   }`}
@@ -716,7 +956,20 @@ export default function CreateFramePage() {
                   <span onClick={(e) => { e.stopPropagation(); toggleVisible(layer.id); }} className="text-lg">{layer.visible ? "👁" : "🚫"}</span>
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F6F7FF] text-xs">{layer.type === "photo" ? `#${layer.photoIndex}` : "PNG"}</span>
                   <span className="min-w-0 flex-1 truncate">{layer.name}</span>
-                  <span onClick={(e) => { e.stopPropagation(); toggleLock(layer.id); }} className="text-lg">{layer.locked ? "🔒" : "🔓"}</span>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLock(layer.id);
+                    }}
+                    className={`rounded-xl px-2 py-1 text-sm ${
+                      layer.locked
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-green-100 text-green-700"
+                    }`}
+                    title={layer.locked ? "Layer terkunci" : "Layer bisa diedit"}
+                  >
+                    {layer.locked ? "LOCKED" : "OPEN"}
+                  </span>
                 </button>
               );
             })}

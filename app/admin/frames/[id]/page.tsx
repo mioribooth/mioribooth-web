@@ -109,6 +109,12 @@ export default function EditFramePage() {
     [layers, selectedLayerId]
   );
 
+  const orderedLayers = useMemo(() => {
+    const photoLayers = layers.filter((layer) => layer.type !== "frame");
+    const frameLayers = layers.filter((layer) => layer.type === "frame");
+    return [...photoLayers, ...frameLayers];
+  }, [layers]);
+
   useEffect(() => {
     async function loadFrame() {
       try {
@@ -938,7 +944,7 @@ export default function EditFramePage() {
           backgroundColor,
           thumbnail,
           isActive,
-          layers: layers.map((layer, index) => ({
+          layers: orderedLayers.map((layer, index) => ({
             ...layer,
             zIndex: index,
           })),
@@ -1120,7 +1126,7 @@ export default function EditFramePage() {
                 setSelectedLayerIds([]);
               }}
             >
-              {layers.map((layer) => {
+              {orderedLayers.map((layer) => {
                 if (!layer.visible) return null;
 
                 if (layer.type === "frame") {
@@ -1313,17 +1319,46 @@ export default function EditFramePage() {
                 ))}
 
                 {selectedLayer.type === "photo" && (
-                  <input
-                    type="number"
-                    value={selectedLayer.photoIndex || 1}
-                    onChange={(e) =>
-                      updateSelectedLayer({
-                        photoIndex: Number(e.target.value || 1),
-                        name: `Foto ${Number(e.target.value || 1)}`,
-                      })
-                    }
-                    className="col-span-2 h-11 rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none"
-                  />
+                  <div className="col-span-2 rounded-2xl bg-[#F6F7FF] p-4">
+                    <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                      Nomor Slot Foto
+                    </p>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={selectedLayer.photoIndex || 1}
+                      onChange={(e) => {
+                        const nextIndex = Math.max(1, Number(e.target.value || 1));
+                        updateSelectedLayer({
+                          photoIndex: nextIndex,
+                          name: `Foto ${nextIndex}`,
+                        });
+                      }}
+                      className="h-12 w-full rounded-xl bg-white px-4 text-lg font-black outline-none"
+                    />
+                    <div className="mt-3 grid grid-cols-6 gap-2">
+                      {[1, 2, 3, 4, 5, 6].map((slotNumber) => (
+                        <button
+                          key={slotNumber}
+                          type="button"
+                          onClick={() =>
+                            updateSelectedLayer({
+                              photoIndex: slotNumber,
+                              name: `Foto ${slotNumber}`,
+                            })
+                          }
+                          className={`h-9 rounded-xl text-sm font-black ${
+                            selectedLayer.photoIndex === slotNumber
+                              ? "bg-[#4263FF] text-white"
+                              : "bg-white text-slate-500"
+                          }`}
+                        >
+                          {slotNumber}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 <div className="col-span-2 grid grid-cols-3 gap-2">
@@ -1362,7 +1397,7 @@ export default function EditFramePage() {
           </div>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-            {[...layers].reverse().map((layer) => (
+            {[...orderedLayers].reverse().map((layer) => (
               <div
                 key={layer.id}
                 draggable
@@ -1404,9 +1439,14 @@ export default function EditFramePage() {
                     e.stopPropagation();
                     toggleLock(layer.id);
                   }}
-                  className="text-lg"
+                  className={`rounded-xl px-2 py-1 text-xs font-black ${
+                    layer.locked
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-green-100 text-green-700"
+                  }`}
+                  title={layer.locked ? "Layer terkunci" : "Layer bisa diedit"}
                 >
-                  {layer.locked ? "🔒" : "🔓"}
+                  {layer.locked ? "LOCKED" : "OPEN"}
                 </button>
               </div>
             ))}
