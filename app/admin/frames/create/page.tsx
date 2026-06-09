@@ -58,7 +58,6 @@ function getPhotoColor(index?: number) {
 export default function CreateFramePage() {
   const router = useRouter();
   const frameRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState("CUSTOM");
@@ -69,11 +68,14 @@ export default function CreateFramePage() {
   const [selectedLayerId, setSelectedLayerId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingFrame, setIsUploadingFrame] = useState(false);
+  const [keepAspectRatio, setKeepAspectRatio] = useState(true);
 
   const selectedLayer = useMemo(
     () => layers.find((layer) => layer.id === selectedLayerId),
     [layers, selectedLayerId]
   );
+
+  const photoCount = layers.filter((layer) => layer.type === "photo").length;
 
   function getScale() {
     const rect = frameRef.current?.getBoundingClientRect();
@@ -83,12 +85,10 @@ export default function CreateFramePage() {
 
   async function uploadFrameImage(file: File | null) {
     if (!file) return;
-
     setIsUploadingFrame(true);
 
     try {
       const reader = new FileReader();
-
       const dataUrl = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(String(reader.result || ""));
         reader.onerror = () => reject(reader.error);
@@ -97,22 +97,15 @@ export default function CreateFramePage() {
 
       const response = await fetch("/api/admin/upload-frame-image", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: dataUrl,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl }),
       });
 
       const result = await response.json();
-
       if (!result.success || !result.url) {
         alert(result.message || "Gagal upload PNG frame.");
         return;
       }
-
-      const frameUrl = result.url;
 
       const frameLayer: Layer = {
         id: createId("frame-layer"),
@@ -124,15 +117,15 @@ export default function CreateFramePage() {
         y: 0,
         width: FRAME_WIDTH,
         height: FRAME_HEIGHT,
-        src: frameUrl,
+        src: result.url,
       };
 
-      setThumbnail(frameUrl);
+      setThumbnail(result.url);
       setLayers((prev) => [
         frameLayer,
         ...prev.filter((layer) => layer.type !== "frame"),
       ]);
-      setSelectedLayerId("");
+      setSelectedLayerId(frameLayer.id);
     } catch (error) {
       console.error("UPLOAD_FRAME_IMAGE_ERROR:", error);
       alert("Gagal upload PNG frame.");
@@ -143,20 +136,19 @@ export default function CreateFramePage() {
 
   function addPhotoSlot() {
     const photoLayers = layers.filter((layer) => layer.type === "photo");
-    const nextIndex =
-      photoLayers.length === 0
-        ? 1
-        : Math.max(...photoLayers.map((layer) => layer.photoIndex || 0)) + 1;
+    const nextIndex = photoLayers.length
+      ? Math.max(...photoLayers.map((layer) => layer.photoIndex || 0)) + 1
+      : 1;
 
     const newLayer: Layer = {
       id: createId("photo"),
       type: "photo",
-      name: `Foto ${nextIndex}`,
+      name: `Photo ${nextIndex}`,
       photoIndex: nextIndex,
       visible: true,
       locked: false,
       x: 120,
-      y: 120 + photoLayers.length * 360,
+      y: 120 + photoLayers.length * 320,
       width: 460,
       height: 460 / CAMERA_RATIO,
     };
@@ -165,29 +157,59 @@ export default function CreateFramePage() {
     setSelectedLayerId(newLayer.id);
   }
 
+  function updateLayer(layerId: string, data: Partial<Layer>) {
+    setLayers((prev) =>
+      prev.map((layer) => (layer.id === layerId ? { ...layer, ...data } : layer))
+    );
+  }
+
   function updateSelectedLayer(data: Partial<Layer>) {
     if (!selectedLayer) return;
-
-    setLayers((prev) =>
-      prev.map((layer) =>
-        layer.id === selectedLayer.id ? { ...layer, ...data } : layer
-      )
-    );
+    updateLayer(selectedLayer.id, data);
   }
 
   function deleteSelectedLayer() {
     if (!selectedLayer) return;
-
     setLayers((prev) => prev.filter((layer) => layer.id !== selectedLayer.id));
     setSelectedLayerId("");
   }
 
+  function duplicateSelectedLayer() {
+    if (!selectedLayer) return;
+
+    const copy: Layer = {
+      ...selectedLayer,
+      id: createId(selectedLayer.type),
+      name:
+        selectedLayer.type === "photo"
+          ? `Photo ${photoCount + 1}`
+          : `${selectedLayer.name} Copy`,
+      photoIndex: selectedLayer.type === "photo" ? photoCount + 1 : selectedLayer.photoIndex,
+      x: selectedLayer.x + 40,
+      y: selectedLayer.y + 40,
+      locked: selectedLayer.type === "frame" ? true : selectedLayer.locked,
+    };
+
+    setLayers((prev) => [...prev, copy]);
+    setSelectedLayerId(copy.id);
+  }
+
+  function toggleVisible(layerId: string) {
+    const layer = layers.find((item) => item.id === layerId);
+    if (!layer) return;
+    updateLayer(layerId, { visible: !layer.visible });
+  }
+
+  function toggleLock(layerId: string) {
+    const layer = layers.find((item) => item.id === layerId);
+    if (!layer || layer.type === "frame") return;
+    updateLayer(layerId, { locked: !layer.locked });
+  }
+
   function startDrag(e: React.PointerEvent, layer: Layer) {
     if (layer.locked || layer.type === "frame") return;
-
     e.preventDefault();
     e.stopPropagation();
-
     setSelectedLayerId(layer.id);
 
     const scale = getScale();
@@ -199,18 +221,10 @@ export default function CreateFramePage() {
     function onMove(moveEvent: PointerEvent) {
       const dx = (moveEvent.clientX - startX) / scale;
       const dy = (moveEvent.clientY - startY) / scale;
-
-      setLayers((prev) =>
-        prev.map((item) =>
-          item.id === layer.id
-            ? {
-                ...item,
-                x: Math.round(originalX + dx),
-                y: Math.round(originalY + dy),
-              }
-            : item
-        )
-      );
+      updateLayer(layer.id, {
+        x: Math.round(originalX + dx),
+        y: Math.round(originalY + dy),
+      });
     }
 
     function onUp() {
@@ -224,7 +238,6 @@ export default function CreateFramePage() {
 
   function startResize(e: React.PointerEvent, layer: Layer) {
     if (layer.locked || layer.type === "frame") return;
-
     e.preventDefault();
     e.stopPropagation();
 
@@ -236,21 +249,19 @@ export default function CreateFramePage() {
 
     function onMove(moveEvent: PointerEvent) {
       const dx = (moveEvent.clientX - startX) / scale;
+      const dy = (moveEvent.clientY - startY) / scale;
 
-      const nextWidth = Math.max(120, originalWidth + dx);
-      const nextHeight = nextWidth / CAMERA_RATIO;
+      let nextWidth = Math.max(120, originalWidth + dx);
+      let nextHeight = Math.max(120, originalHeight + dy);
 
-      setLayers((prev) =>
-        prev.map((item) =>
-          item.id === layer.id
-            ? {
-                ...item,
-                width: Math.round(nextWidth),
-                height: Math.round(nextHeight || originalHeight),
-              }
-            : item
-        )
-      );
+      if (keepAspectRatio) {
+        nextHeight = nextWidth / CAMERA_RATIO;
+      }
+
+      updateLayer(layer.id, {
+        width: Math.round(nextWidth),
+        height: Math.round(nextHeight),
+      });
     }
 
     function onUp() {
@@ -278,9 +289,7 @@ export default function CreateFramePage() {
     try {
       const response = await fetch("/api/frames", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           category,
@@ -288,15 +297,11 @@ export default function CreateFramePage() {
           backgroundColor,
           thumbnail,
           isActive: true,
-          layers: layers.map((layer, index) => ({
-            ...layer,
-            zIndex: index,
-          })),
+          layers: layers.map((layer, index) => ({ ...layer, zIndex: index })),
         }),
       });
 
       const result = await response.json();
-
       if (!result.success) {
         alert(result.message || "Gagal menyimpan frame.");
         return;
@@ -313,30 +318,56 @@ export default function CreateFramePage() {
   }
 
   return (
-    <div className="text-[#101828]">
-      <div className="flex items-center justify-between rounded-[36px] bg-white p-7 shadow-xl">
-        <div>
-          <h1 className="text-4xl font-black">Create Frame</h1>
-          <p className="mt-2 font-semibold text-slate-500">
-            Buat frame baru dan atur slot foto langsung dari website.
-          </p>
-        </div>
+    <div className="min-h-[calc(100vh-80px)] text-[#101828]">
+      <div className="grid h-[calc(100vh-92px)] grid-cols-[230px_minmax(420px,1fr)_350px_360px] gap-5 overflow-hidden">
+        <aside className="flex flex-col rounded-[32px] bg-[#101828] p-5 text-white shadow-xl">
+          <div className="mb-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4263FF] text-2xl">📸</div>
+              <div>
+                <h1 className="text-xl font-black">Miori Booth</h1>
+                <p className="text-xs font-bold text-white/50">Frame Creator</p>
+              </div>
+            </div>
+          </div>
 
-        <button
-          onClick={saveFrame}
-          disabled={isSaving}
-          className="h-[68px] rounded-full bg-[#4263FF] px-8 text-xl font-black text-white disabled:opacity-50"
-        >
-          {isSaving ? "MENYIMPAN..." : "SIMPAN FRAME"}
-        </button>
-      </div>
+          <div className="space-y-2">
+            <p className="px-3 text-xs font-black uppercase tracking-widest text-white/35">Menu</p>
+            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">⌂ Dashboard</button>
+            <button className="flex h-12 items-center gap-3 rounded-2xl bg-[#4263FF] px-4 text-left font-black text-white">▣ Frames</button>
+            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">⇩ Downloads</button>
+          </div>
 
-      <div className="mt-6 grid grid-cols-[1fr_420px] gap-6">
-        <div className="rounded-[36px] bg-white p-7 shadow-xl">
-          <div className="flex justify-center rounded-[30px] bg-[#D9DDEB] p-8">
+          <div className="mt-8 space-y-2">
+            <p className="px-3 text-xs font-black uppercase tracking-widest text-white/35">Tools</p>
+            <button className="flex h-12 items-center gap-3 rounded-2xl bg-white/10 px-4 text-left font-black text-white">✦ Create Frame</button>
+            <button className="flex h-12 items-center gap-3 rounded-2xl px-4 text-left font-bold text-white/70">👁 Preview</button>
+          </div>
+
+          <div className="mt-auto rounded-3xl bg-white/10 p-4">
+            <p className="font-black">Admin</p>
+            <p className="text-xs font-semibold text-white/45">mioribooth</p>
+          </div>
+        </aside>
+
+        <section className="flex min-w-0 flex-col rounded-[32px] bg-white shadow-xl">
+          <div className="flex h-[76px] items-center justify-between border-b border-slate-100 px-6">
+            <div>
+              <h2 className="text-xl font-black">WORKSPACE - {layoutType === "4R" ? "4R" : "PHOTO STRIP"}</h2>
+              <p className="text-xs font-bold text-slate-400">1200 × 1800px</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-10 rounded-xl bg-[#4263FF] px-4 font-black text-white">↖</button>
+              <button className="h-10 rounded-xl bg-[#F6F7FF] px-4 font-black">100%</button>
+              <button className="h-10 rounded-xl bg-[#F6F7FF] px-4 font-black">⛶</button>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#EEF1F7] p-8">
             <div
               ref={frameRef}
-              className="relative h-[760px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
+              onClick={() => setSelectedLayerId("")}
+              className="relative aspect-[2/3] h-[78vh] max-h-[900px] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
             >
               {layers.map((layer) => {
@@ -349,7 +380,7 @@ export default function CreateFramePage() {
                       src={layer.src}
                       alt="Frame"
                       draggable={false}
-                      className="absolute object-cover pointer-events-none select-none"
+                      className="absolute select-none object-cover"
                       style={{
                         left: `${(layer.x / FRAME_WIDTH) * 100}%`,
                         top: `${(layer.y / FRAME_HEIGHT) * 100}%`,
@@ -366,10 +397,14 @@ export default function CreateFramePage() {
                 return (
                   <div
                     key={layer.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedLayerId(layer.id);
+                    }}
                     onPointerDown={(e) => startDrag(e, layer)}
-                    className={`absolute flex cursor-move select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
-                      selected ? "outline outline-[5px] outline-slate-950" : ""
-                    }`}
+                    className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
+                      layer.locked ? "cursor-not-allowed" : "cursor-move"
+                    } ${selected ? "outline outline-[5px] outline-[#4263FF]" : ""}`}
                     style={{
                       backgroundColor: color.bg,
                       borderColor: color.border,
@@ -381,11 +416,10 @@ export default function CreateFramePage() {
                     }}
                   >
                     FOTO #{layer.photoIndex}
-
-                    {selected && (
+                    {selected && !layer.locked && (
                       <div
                         onPointerDown={(e) => startResize(e, layer)}
-                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-slate-950 bg-white"
+                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-[#4263FF] bg-white"
                       />
                     )}
                   </div>
@@ -393,116 +427,108 @@ export default function CreateFramePage() {
               })}
             </div>
           </div>
-        </div>
 
-        <div className="space-y-5">
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Frame Info</h2>
+          <div className="flex h-[52px] items-center justify-between border-t border-slate-100 px-6 text-sm font-black text-slate-500">
+            <span>X: {selectedLayer ? Math.round(selectedLayer.x) : 0}</span>
+            <span>Y: {selectedLayer ? Math.round(selectedLayer.y) : 0}</span>
+            <span>W: {selectedLayer ? Math.round(selectedLayer.width) : FRAME_WIDTH}</span>
+            <span>H: {selectedLayer ? Math.round(selectedLayer.height) : FRAME_HEIGHT}</span>
+          </div>
+        </section>
 
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nama frame"
-              className="mt-5 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
-            />
-
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
-            >
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={layoutType}
-              onChange={(e) => setLayoutType(e.target.value as LayoutType)}
-              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
-            >
-              <option value="PHOTO_STRIP">2R / Photo Strip</option>
-              <option value="4R">4R</option>
-            </select>
-
-            <input
-              value={backgroundColor}
-              onChange={(e) => setBackgroundColor(e.target.value)}
-              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
-            />
+        <section className="min-w-0 space-y-5 overflow-y-auto pr-1">
+          <div className="rounded-[28px] bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-black">FRAME INFO</h2>
+            <div className="mt-4 space-y-3">
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama frame" className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none" />
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none">
+                {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select value={layoutType} onChange={(e) => setLayoutType(e.target.value as LayoutType)} className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none">
+                <option value="PHOTO_STRIP">2R / Photo Strip</option>
+                <option value="4R">4R</option>
+              </select>
+              <input value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)} className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none" />
+            </div>
           </div>
 
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Tools</h2>
-
-            <button
-              onClick={addPhotoSlot}
-              className="mt-5 h-14 w-full rounded-full bg-[#4263FF] font-black text-white"
-            >
-              + PHOTO SLOT
-            </button>
-
-            <label className="mt-4 flex h-14 w-full cursor-pointer items-center justify-center rounded-full bg-[#FF7BC3] font-black text-white">
-              {isUploadingFrame ? "UPLOADING..." : "UPLOAD PNG FRAME"}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => uploadFrameImage(e.target.files?.[0] || null)}
-              />
-            </label>
+          <div className="rounded-[28px] bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-black">TOOLS</h2>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button onClick={addPhotoSlot} className="h-20 rounded-2xl bg-[#4263FF] font-black text-white">＋ Photo</button>
+              <label className="flex h-20 cursor-pointer items-center justify-center rounded-2xl bg-[#FF7BC3] text-center font-black text-white">
+                {isUploadingFrame ? "Uploading..." : "Upload Frame"}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => uploadFrameImage(e.target.files?.[0] || null)} />
+              </label>
+              <button onClick={duplicateSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Duplicate</button>
+              <button onClick={deleteSelectedLayer} disabled={!selectedLayer} className="h-16 rounded-2xl bg-red-50 font-black text-red-500 disabled:opacity-40">Delete</button>
+              <button onClick={() => selectedLayer && toggleLock(selectedLayer.id)} disabled={!selectedLayer || selectedLayer.type === "frame"} className="h-16 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF] disabled:opacity-40">Lock</button>
+              <button onClick={() => setKeepAspectRatio((prev) => !prev)} className={`h-16 rounded-2xl font-black ${keepAspectRatio ? "bg-[#4263FF] text-white" : "bg-[#F6F7FF] text-slate-600"}`}>Aspect</button>
+            </div>
           </div>
 
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Selected Layer</h2>
-
+          <div className="rounded-[28px] bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-black">SELECTED LAYER</h2>
             {selectedLayer ? (
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {["x", "y", "width", "height"].map((key) => (
-                  <input
-                    key={key}
-                    type="number"
-                    value={Math.round((selectedLayer as any)[key] || 0)}
-                    onChange={(e) =>
-                      updateSelectedLayer({
-                        [key]: Number(e.target.value),
-                      } as Partial<Layer>)
-                    }
-                    className="h-12 rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
-                  />
-                ))}
-
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl bg-[#F6F7FF] p-4">
+                  <p className="font-black">{selectedLayer.name}</p>
+                  <p className="text-xs font-bold text-slate-400">ID: {selectedLayer.id}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["x", "y", "width", "height"] as const).map((key) => (
+                    <div key={key}>
+                      <p className="mb-1 text-xs font-black text-slate-400">{key.toUpperCase()}</p>
+                      <input type="number" value={Math.round(selectedLayer[key] || 0)} onChange={(e) => updateSelectedLayer({ [key]: Number(e.target.value) } as Partial<Layer>)} className="h-11 w-full rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none" />
+                    </div>
+                  ))}
+                </div>
                 {selectedLayer.type === "photo" && (
-                  <input
-                    type="number"
-                    value={selectedLayer.photoIndex || 1}
-                    onChange={(e) =>
-                      updateSelectedLayer({
-                        photoIndex: Number(e.target.value || 1),
-                        name: `Foto ${Number(e.target.value || 1)}`,
-                      })
-                    }
-                    className="col-span-2 h-12 rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
-                  />
+                  <input type="number" value={selectedLayer.photoIndex || 1} onChange={(e) => updateSelectedLayer({ photoIndex: Number(e.target.value || 1), name: `Photo ${Number(e.target.value || 1)}` })} className="h-11 w-full rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none" />
                 )}
-
-                <button
-                  onClick={deleteSelectedLayer}
-                  className="col-span-2 h-12 rounded-full bg-red-50 font-black text-red-500"
-                >
-                  HAPUS LAYER
-                </button>
               </div>
             ) : (
-              <p className="mt-5 font-bold text-slate-400">
-                Pilih slot foto dulu.
-              </p>
+              <p className="mt-4 text-sm font-bold text-slate-400">Pilih layer dulu.</p>
             )}
           </div>
-        </div>
+        </section>
+
+        <section className="flex min-w-0 flex-col rounded-[32px] bg-white shadow-xl">
+          <div className="flex h-[76px] items-center justify-between border-b border-slate-100 px-5">
+            <h2 className="text-lg font-black">LAYER ({layers.length})</h2>
+            <button onClick={deleteSelectedLayer} disabled={!selectedLayer} className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-500 disabled:opacity-40">🗑</button>
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+            {[...layers].reverse().map((layer) => {
+              const active = selectedLayerId === layer.id;
+              return (
+                <button
+                  key={layer.id}
+                  onClick={() => setSelectedLayerId(layer.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left font-black transition ${
+                    active ? "border-[#4263FF] bg-[#EEF1FF] text-[#4263FF]" : "border-slate-100 bg-white text-slate-600"
+                  }`}
+                >
+                  <span className="cursor-grab text-slate-400">⋮⋮</span>
+                  <span onClick={(e) => { e.stopPropagation(); toggleVisible(layer.id); }} className="text-lg">{layer.visible ? "👁" : "🚫"}</span>
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F6F7FF] text-xs">{layer.type === "photo" ? `#${layer.photoIndex}` : "PNG"}</span>
+                  <span className="min-w-0 flex-1 truncate">{layer.name}</span>
+                  <span onClick={(e) => { e.stopPropagation(); toggleLock(layer.id); }} className="text-lg">{layer.locked ? "🔒" : "🔓"}</span>
+                </button>
+              );
+            })}
+            {!layers.length && (
+              <div className="flex h-full items-center justify-center text-center text-sm font-bold text-slate-400">
+                Belum ada layer.<br />Tambahkan photo slot atau upload frame.
+              </div>
+            )}
+          </div>
+          <div className="border-t border-slate-100 p-5">
+            <button onClick={saveFrame} disabled={isSaving} className="h-14 w-full rounded-2xl bg-[#4263FF] font-black text-white disabled:opacity-50">
+              {isSaving ? "MENYIMPAN..." : "SIMPAN FRAME"}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );
