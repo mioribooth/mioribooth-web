@@ -34,36 +34,42 @@ export default async function DownloadPage({ params }: PageProps) {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#F6F2FF] to-[#FFFFFF]">
-      <div className="mx-auto max-w-5xl px-5 py-10">
-        <div className="text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-lg">
-            <span className="text-4xl">📸</span>
+    <main className="min-h-screen overflow-x-hidden bg-gradient-to-b from-[#F6F2FF] via-white to-white">
+      <div className="mx-auto w-full max-w-5xl px-4 pb-8 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
+        <section className="rounded-[2rem] border border-white/80 bg-white/80 px-4 py-6 text-center shadow-sm backdrop-blur sm:px-8 sm:py-10">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#F6F2FF] shadow-sm sm:h-20 sm:w-20">
+            <span className="text-3xl sm:text-4xl">📸</span>
           </div>
 
-          <h1 className="text-5xl font-black text-slate-900">Miori Booth</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-5xl">
+            Miori Booth
+          </h1>
 
-          <p className="mt-3 text-lg font-semibold text-slate-500">
-            Download Soft File
+          <p className="mt-2 text-base font-semibold text-slate-500 sm:text-lg">
+            Download Soft File Kamu
           </p>
 
-          <p className="mt-2 text-sm text-slate-400">
-            Session ID: {sessionId}
-          </p>
-        </div>
+          <div className="mx-auto mt-4 max-w-full rounded-2xl bg-slate-50 px-3 py-2">
+            <p className="break-all text-xs font-medium text-slate-400 sm:text-sm">
+              Session ID: {sessionId}
+            </p>
+          </div>
+        </section>
 
-        <DownloadGallery
-          sessionId={sessionId}
-          framePhoto={session.framePhoto}
-          singlePhotos={session.singlePhotos || []}
-          gif={session.gif}
-          liveFrameVideo={session.liveFrameVideo || ""}
-          livePhotos={session.livePhotos || []}
-          uploadStatus={session.uploadStatus || {}}
-        />
+        <section className="mt-5 sm:mt-8">
+          <DownloadGallery
+            sessionId={sessionId}
+            framePhoto={session.framePhoto}
+            singlePhotos={session.singlePhotos || []}
+            gif={session.gif}
+            liveFrameVideo={session.liveFrameVideo || ""}
+            livePhotos={session.livePhotos || []}
+            uploadStatus={session.uploadStatus || {}}
+          />
+        </section>
 
-        <footer className="mt-16 text-center">
-          <p className="text-sm font-medium text-slate-400">
+        <footer className="mt-10 pb-6 text-center sm:mt-16">
+          <p className="text-xs font-medium text-slate-400 sm:text-sm">
             Powered by Miori Booth
           </p>
         </footer>
