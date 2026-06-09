@@ -546,6 +546,116 @@ export default function EditFramePage() {
     window.addEventListener("pointerup", onUp);
   }
 
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      const isTyping =
+        activeTag === "INPUT" ||
+        activeTag === "TEXTAREA" ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+
+      if (isTyping) return;
+
+      const step = e.shiftKey ? 10 : 1;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+
+        const selected = layers.filter((layer) =>
+          selectedLayerIds.includes(layer.id)
+        );
+
+        if (selected.length) {
+          setCopiedLayer(JSON.parse(JSON.stringify(selected[0])));
+          localStorage.setItem(
+            "miori-multi-copy",
+            JSON.stringify(selected)
+          );
+        }
+
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+
+        const raw = localStorage.getItem("miori-multi-copy");
+        if (!raw) return;
+
+        const copiedLayers: Layer[] = JSON.parse(raw);
+
+        const nextLayers = copiedLayers.map((layer) => ({
+          ...layer,
+          id: createId(layer.type),
+          x: layer.x + 40,
+          y: layer.y + 40,
+        }));
+
+        setLayersWithHistory((prev) => [...prev, ...nextLayers]);
+        setSelectedLayerIds(nextLayers.map((layer) => layer.id));
+        setSelectedLayerId(nextLayers[0]?.id || "");
+        return;
+      }
+
+      if (e.key === "Delete") {
+        e.preventDefault();
+
+        if (!selectedLayerIds.length) return;
+
+        setLayersWithHistory((prev) =>
+          prev.filter((layer) => !selectedLayerIds.includes(layer.id))
+        );
+
+        setSelectedLayerIds([]);
+        setSelectedLayerId("");
+        return;
+      }
+
+      const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+      if (arrowKeys.includes(e.key) && selectedLayerIds.length) {
+        e.preventDefault();
+
+        setLayers((prev) =>
+          prev.map((layer) => {
+            if (
+              !selectedLayerIds.includes(layer.id) ||
+              layer.locked ||
+              layer.type === "frame"
+            ) {
+              return layer;
+            }
+
+            if (e.key === "ArrowUp") {
+              return { ...layer, y: layer.y - step };
+            }
+
+            if (e.key === "ArrowDown") {
+              return { ...layer, y: layer.y + step };
+            }
+
+            if (e.key === "ArrowLeft") {
+              return { ...layer, x: layer.x - step };
+            }
+
+            if (e.key === "ArrowRight") {
+              return { ...layer, x: layer.x + step };
+            }
+
+            return layer;
+          })
+        );
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [layers, selectedLayerIds]);
+
   function addCategory() {
     const next = newCategoryName.trim().toUpperCase();
     if (!next || categories.includes(next)) return;
@@ -980,7 +1090,19 @@ export default function EditFramePage() {
                       moveLayer(dragLayerRef.current, layer.id);
                     }
                   }}
-                  onClick={() => setSelectedLayerId(layer.id)}
+                  onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            setSelectedLayerIds((prev) =>
+                              prev.includes(layer.id)
+                                ? prev.filter((id) => id !== layer.id)
+                                : [...prev, layer.id]
+                            );
+                          } else {
+                            setSelectedLayerIds([layer.id]);
+                          }
+
+                          setSelectedLayerId(layer.id);
+                        }}
                   className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
                     selectedLayerId === layer.id
                       ? "bg-[#4263FF] text-white"
