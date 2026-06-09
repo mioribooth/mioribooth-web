@@ -510,9 +510,17 @@ export default function EditFramePage() {
 
     const isMultiSelect = e.ctrlKey || e.metaKey || e.shiftKey;
 
-    selectLayer(layer.id, isMultiSelect);
+    if (isMultiSelect) {
+      selectLayer(layer.id, true);
+      return;
+    }
 
-    if (isMultiSelect) return;
+    const selectedIds = selectedLayerIds.includes(layer.id)
+      ? selectedLayerIds
+      : [layer.id];
+
+    setSelectedLayerId(layer.id);
+    setSelectedLayerIds(selectedIds);
 
     markDirty();
     pushHistory();
@@ -520,20 +528,32 @@ export default function EditFramePage() {
     const scale = getScale();
     const startX = e.clientX;
     const startY = e.clientY;
-    const originalX = layer.x;
-    const originalY = layer.y;
+
+    const originalPositions = layers
+      .filter((item) => selectedIds.includes(item.id))
+      .reduce<Record<string, { x: number; y: number }>>((acc, item) => {
+        acc[item.id] = { x: item.x, y: item.y };
+        return acc;
+      }, {});
 
     function onMove(moveEvent: PointerEvent) {
       const dx = (moveEvent.clientX - startX) / scale;
       const dy = (moveEvent.clientY - startY) / scale;
 
-      updateLayer(
-        layer.id,
-        {
-          x: Math.round(originalX + dx),
-          y: Math.round(originalY + dy),
-        },
-        false
+      setLayers((prev) =>
+        prev.map((item) => {
+          const original = originalPositions[item.id];
+
+          if (!original || item.locked || item.type === "frame") {
+            return item;
+          }
+
+          return {
+            ...item,
+            x: Math.round(original.x + dx),
+            y: Math.round(original.y + dy),
+          };
+        })
       );
     }
 
@@ -813,7 +833,7 @@ export default function EditFramePage() {
   }
 
   return (
-    <div className="relative text-[#101828]">
+    <div className="min-h-screen overflow-hidden bg-[#F5F6FA] text-[#101828]">
       {showSavedToast && (
         <div className="fixed left-1/2 top-8 z-[2000] -translate-x-1/2 rounded-full bg-green-100 px-8 py-4 text-xl font-black text-green-700 shadow-xl">
           Frame berhasil disimpan
@@ -847,62 +867,73 @@ export default function EditFramePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between rounded-[36px] bg-white p-7 shadow-xl">
-        <div>
-          <h1 className="text-4xl font-black">Frame Editor Pro</h1>
-          <p className="mt-2 font-semibold text-slate-500">
-            Editor website dengan fitur layer lengkap dan sinkron ke Electron.
-          </p>
-          <p className={`mt-2 text-sm font-black ${isDirty ? "text-red-500" : "text-green-600"}`}>
-            {isDirty ? "● Belum Disimpan" : "● Tersimpan"}
-          </p>
-        </div>
+      <div className="grid h-screen grid-cols-[240px_minmax(360px,1fr)_360px_360px] gap-6 p-5">
+        <aside className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4263FF] text-2xl text-white">
+                📸
+              </div>
+              <div>
+                <h2 className="text-xl font-black">Miori Booth</h2>
+                <p className="text-xs font-bold text-slate-400">Frame Admin</p>
+              </div>
+            </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={leavePage}
-            className="h-[58px] rounded-full bg-[#F6F7FF] px-6 font-black text-[#4263FF]"
-          >
-            ← LIBRARY
-          </button>
+            <div className="mt-8 space-y-2">
+              <button
+                onClick={leavePage}
+                className="flex h-12 w-full items-center rounded-2xl px-4 text-left font-black text-slate-500 hover:bg-[#F6F7FF]"
+              >
+                ← Library
+              </button>
+              <button className="flex h-12 w-full items-center rounded-2xl bg-[#4263FF] px-4 text-left font-black text-white">
+                Frame Editor
+              </button>
+              <button
+                onClick={saveFrame}
+                disabled={isSaving}
+                className="flex h-12 w-full items-center rounded-2xl bg-green-50 px-4 text-left font-black text-green-700 disabled:opacity-50"
+              >
+                {isSaving ? "Menyimpan..." : "Simpan Frame"}
+              </button>
+              <button
+                onClick={deleteFrame}
+                className="flex h-12 w-full items-center rounded-2xl bg-red-50 px-4 text-left font-black text-red-500"
+              >
+                Hapus Frame
+              </button>
+            </div>
+          </div>
 
-          <button
-            onClick={undo}
-            className="h-[58px] rounded-full border-2 border-[#4263FF] px-6 font-black text-[#4263FF]"
-          >
-            UNDO
-          </button>
+          <div className="mt-auto rounded-3xl bg-[#F6F7FF] p-4">
+            <p className="text-xs font-black uppercase text-slate-400">Status</p>
+            <p className={`mt-2 text-sm font-black ${isDirty ? "text-red-500" : "text-green-600"}`}>
+              {isDirty ? "● Belum Disimpan" : "● Tersimpan"}
+            </p>
+            <p className="mt-3 text-xs font-bold leading-relaxed text-slate-400">
+              Shortcut: Ctrl + klik untuk multi select, Ctrl+C, Ctrl+V, Delete, Arrow.
+            </p>
+          </div>
+        </aside>
 
-          <button
-            onClick={redo}
-            className="h-[58px] rounded-full border-2 border-[#4263FF] px-6 font-black text-[#4263FF]"
-          >
-            REDO
-          </button>
+        <section className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div>
+              <h1 className="text-2xl font-black">Workspace 4R</h1>
+              <p className="mt-1 text-sm font-bold text-slate-400">Canvas 1200 × 1800 px</p>
+            </div>
 
-          <button
-            onClick={deleteFrame}
-            className="h-[58px] rounded-full bg-red-50 px-6 font-black text-red-500"
-          >
-            DELETE
-          </button>
+            <div className="flex gap-2">
+              <button onClick={undo} className="h-11 rounded-2xl bg-[#F6F7FF] px-4 font-black text-slate-600">UNDO</button>
+              <button onClick={redo} className="h-11 rounded-2xl bg-[#F6F7FF] px-4 font-black text-slate-600">REDO</button>
+            </div>
+          </div>
 
-          <button
-            onClick={saveFrame}
-            disabled={isSaving}
-            className="h-[58px] rounded-full bg-[#4263FF] px-8 font-black text-white disabled:opacity-50"
-          >
-            {isSaving ? "MENYIMPAN..." : "SIMPAN"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-6 flex gap-6 h-[calc(100vh-170px)] overflow-hidden">
-        <div className="flex-1 rounded-[36px] bg-white p-7 shadow-xl overflow-hidden">
-          <div className="flex h-full items-center justify-center rounded-[30px] bg-[#D9DDEB] p-8 overflow-auto">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#EAEDF5] p-8">
             <div
               ref={frameRef}
-              className="relative h-[82vh] max-h-[980px] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
+              className="relative h-full max-h-[calc(100vh-170px)] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
               onClick={() => {
                 setSelectedLayerId("");
@@ -919,7 +950,7 @@ export default function EditFramePage() {
                       src={layer.src}
                       alt="Frame"
                       draggable={false}
-                      className="absolute object-cover pointer-events-none select-none"
+                      className="pointer-events-none absolute select-none object-cover"
                       style={{
                         left: `${(layer.x / FRAME_WIDTH) * 100}%`,
                         top: `${(layer.y / FRAME_HEIGHT) * 100}%`,
@@ -937,12 +968,10 @@ export default function EditFramePage() {
                   <div
                     key={layer.id}
                     onPointerDown={(e) => startDrag(e, layer)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
+                    onClick={(e) => e.stopPropagation()}
                     className={`absolute flex select-none items-center justify-center border-[4px] border-dashed text-2xl font-black ${
                       layer.locked ? "cursor-not-allowed" : "cursor-move"
-                    } ${selected ? "outline outline-[5px] outline-slate-950" : ""}`}
+                    } ${selected ? "outline outline-[5px] outline-[#4263FF]" : ""}`}
                     style={{
                       backgroundColor: color.bg,
                       borderColor: color.border,
@@ -958,7 +987,7 @@ export default function EditFramePage() {
                     {selected && !layer.locked && (
                       <div
                         onPointerDown={(e) => startResize(e, layer)}
-                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-slate-950 bg-white"
+                        className="absolute bottom-[-14px] right-[-14px] h-10 w-10 rounded-full border-[6px] border-[#4263FF] bg-white"
                       />
                     )}
                   </div>
@@ -966,24 +995,16 @@ export default function EditFramePage() {
               })}
             </div>
           </div>
-        </div>
 
-        <div className={`${showRightPanel ? "w-[420px]" : "w-[76px]"} transition-all duration-300 flex-shrink-0`}>
-          <div className="sticky top-0 h-full">
-            <div className="mb-4 flex justify-end">
-              <button
-                onClick={() => setShowRightPanel((prev) => !prev)}
-                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4263FF] text-3xl font-black text-white shadow-lg"
-              >
-                {showRightPanel ? "→" : "←"}
-              </button>
-            </div>
+          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3 text-sm font-black text-slate-400">
+            <span>Selected: {selectedLayerIds.length}</span>
+            <span>W: {FRAME_WIDTH} &nbsp; H: {FRAME_HEIGHT}</span>
+          </div>
+        </section>
 
-            {showRightPanel && (
-              <div className="h-[calc(100vh-240px)] overflow-y-auto space-y-5 pr-2">
-
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Frame Info</h2>
+        <section className="flex min-h-0 flex-col gap-5 overflow-y-auto">
+          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black uppercase">Frame Info</h2>
 
             <input
               value={name}
@@ -992,38 +1013,31 @@ export default function EditFramePage() {
                 setIsDirty(true);
               }}
               placeholder="Nama frame"
-              className="mt-5 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
+              className="mt-5 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
             />
 
-            <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
               <select
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
                   setIsDirty(true);
                 }}
-                className="h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
+                className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
               >
                 {categories.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
+                  <option key={item} value={item}>{item}</option>
                 ))}
               </select>
 
-              <button
-                onClick={addCategory}
-                className="h-14 rounded-2xl bg-[#4263FF] px-4 font-black text-white"
-              >
-                +
-              </button>
+              <button onClick={addCategory} className="h-12 rounded-2xl bg-[#4263FF] px-4 font-black text-white">+</button>
             </div>
 
             <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="Kategori baru"
-              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
+              className="mt-3 h-11 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
             />
 
             <select
@@ -1032,7 +1046,7 @@ export default function EditFramePage() {
                 setLayoutType(e.target.value as LayoutType);
                 setIsDirty(true);
               }}
-              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
+              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
             >
               <option value="PHOTO_STRIP">2R / Photo Strip</option>
               <option value="4R">4R</option>
@@ -1044,7 +1058,7 @@ export default function EditFramePage() {
                 setBackgroundColor(e.target.value);
                 setIsDirty(true);
               }}
-              className="mt-4 h-14 w-full rounded-2xl bg-[#F6F7FF] px-5 font-bold outline-none"
+              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
             />
 
             <button
@@ -1052,7 +1066,7 @@ export default function EditFramePage() {
                 setIsActive((prev) => !prev);
                 setIsDirty(true);
               }}
-              className={`mt-4 h-14 w-full rounded-full font-black ${
+              className={`mt-3 h-12 w-full rounded-full font-black ${
                 isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
               }`}
             >
@@ -1060,89 +1074,13 @@ export default function EditFramePage() {
             </button>
           </div>
 
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Layers</h2>
-
-            <div className="mt-4 max-h-[340px] space-y-2 overflow-y-auto">
-              {[...layers].reverse().map((layer) => (
-                <div
-                  key={layer.id}
-                  draggable
-                  onDragStart={() => {
-                    dragLayerRef.current = layer.id;
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragLayerRef.current) {
-                      moveLayer(dragLayerRef.current, layer.id);
-                    }
-                  }}
-                  onClick={(e) => {
-                    selectLayer(layer.id, e.ctrlKey || e.metaKey || e.shiftKey);
-                  }}
-                  className={`flex w-full cursor-grab items-center gap-2 rounded-2xl px-4 py-3 text-left font-black ${
-                    selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id
-                      ? "bg-[#4263FF] text-white"
-                      : "bg-[#F6F7FF] text-slate-600"
-                  }`}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleVisible(layer.id);
-                    }}
-                    className="text-lg"
-                  >
-                    {layer.visible ? "👁" : "🚫"}
-                  </button>
-
-                  <span className="flex-1">
-                    {layer.name}
-                    {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
-                  </span>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleLock(layer.id);
-                    }}
-                    className="text-lg"
-                  >
-                    {layer.locked ? "🔒" : "🔓"}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <button
-                onClick={sendBackward}
-                className="h-11 rounded-full bg-[#F6F7FF] font-black"
-              >
-                SEND BACK
-              </button>
-
-              <button
-                onClick={bringForward}
-                className="h-11 rounded-full bg-[#F6F7FF] font-black"
-              >
-                BRING FRONT
-              </button>
-            </div>
-          </div>
-
-<div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Tools</h2>
+          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black uppercase">Tools</h2>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                onClick={addPhotoSlot}
-                className="h-12 rounded-full bg-[#4263FF] font-black text-white"
-              >
-                + PHOTO
-              </button>
+              <button onClick={addPhotoSlot} className="h-12 rounded-2xl bg-[#4263FF] font-black text-white">+ PHOTO</button>
 
-              <label className="flex h-12 cursor-pointer items-center justify-center rounded-full bg-[#FF7BC3] font-black text-white">
+              <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-[#FF7BC3] font-black text-white">
                 {isUploadingFrame ? "UP..." : "PNG"}
                 <input
                   type="file"
@@ -1152,33 +1090,10 @@ export default function EditFramePage() {
                 />
               </label>
 
-              <button
-                onClick={copyLayer}
-                className="h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
-              >
-                COPY
-              </button>
-
-              <button
-                onClick={pasteLayer}
-                className="h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
-              >
-                PASTE
-              </button>
-
-              <button
-                onClick={duplicateSelectedLayer}
-                className="col-span-2 h-12 rounded-full bg-[#EEF1FF] font-black text-[#4263FF]"
-              >
-                DUPLICATE
-              </button>
-
-              <button
-                onClick={renumberPhotoLayers}
-                className="col-span-2 h-12 rounded-full bg-[#F3EEFF] font-black text-[#7657FF]"
-              >
-                AUTO RENUMBER FOTO
-              </button>
+              <button onClick={copyLayer} className="h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">COPY</button>
+              <button onClick={pasteLayer} className="h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">PASTE</button>
+              <button onClick={duplicateSelectedLayer} className="col-span-2 h-12 rounded-2xl bg-[#EEF1FF] font-black text-[#4263FF]">DUPLICATE</button>
+              <button onClick={renumberPhotoLayers} className="col-span-2 h-12 rounded-2xl bg-[#F3EEFF] font-black text-[#7657FF]">AUTO RENUMBER FOTO</button>
             </div>
 
             <button
@@ -1191,25 +1106,21 @@ export default function EditFramePage() {
             </button>
           </div>
 
-          <div className="rounded-[30px] bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-black">Selected Layer</h2>
+          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black uppercase">Selected Layer</h2>
 
             {selectedLayer ? (
               <div className="mt-5 grid grid-cols-2 gap-3">
                 {(["x", "y", "width", "height"] as const).map((key) => (
                   <div key={key}>
-                    <p className="mb-1 text-xs font-black text-slate-400">
-                      {key.toUpperCase()}
-                    </p>
+                    <p className="mb-1 text-xs font-black text-slate-400">{key.toUpperCase()}</p>
                     <input
                       type="number"
                       value={Math.round(selectedLayer[key] || 0)}
                       onChange={(e) =>
-                        updateSelectedLayer({
-                          [key]: Number(e.target.value),
-                        } as Partial<Layer>)
+                        updateSelectedLayer({ [key]: Number(e.target.value) } as Partial<Layer>)
                       }
-                      className="h-12 w-full rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
+                      className="h-11 w-full rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none"
                     />
                   </div>
                 ))}
@@ -1224,7 +1135,7 @@ export default function EditFramePage() {
                         name: `Foto ${Number(e.target.value || 1)}`,
                       })
                     }
-                    className="col-span-2 h-12 rounded-xl bg-[#F6F7FF] px-4 font-bold outline-none"
+                    className="col-span-2 h-11 rounded-xl bg-[#F6F7FF] px-3 font-bold outline-none"
                   />
                 )}
 
@@ -1244,25 +1155,81 @@ export default function EditFramePage() {
                   <button onClick={() => shiftAll("y", 10)} className="h-10 rounded-xl bg-[#EEF1FF] font-black">↓</button>
                 </div>
 
-                <button
-                  onClick={deleteSelectedLayer}
-                  className="col-span-2 h-12 rounded-full bg-red-50 font-black text-red-500"
-                >
-                  HAPUS LAYER
-                </button>
+                <button onClick={deleteSelectedLayer} className="col-span-2 h-12 rounded-full bg-red-50 font-black text-red-500">HAPUS LAYER</button>
               </div>
             ) : (
-              <p className="mt-5 font-bold text-slate-400">
-                Pilih slot foto dulu.
-              </p>
+              <p className="mt-5 font-bold text-slate-400">Pilih slot foto dulu.</p>
             )}
+          </div>
+        </section>
+
+        <section className="flex min-h-0 flex-col rounded-[30px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <div>
+              <h2 className="text-xl font-black uppercase">Layer</h2>
+              <p className="mt-1 text-xs font-bold text-slate-400">Drag layer untuk ubah urutan</p>
+            </div>
+            <div className="rounded-full bg-[#F6F7FF] px-3 py-1 text-xs font-black text-slate-500">
+              {layers.length}
+            </div>
           </div>
 
-          
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+            {[...layers].reverse().map((layer) => (
+              <div
+                key={layer.id}
+                draggable
+                onDragStart={() => {
+                  dragLayerRef.current = layer.id;
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (dragLayerRef.current) moveLayer(dragLayerRef.current, layer.id);
+                }}
+                onClick={(e) => selectLayer(layer.id, e.ctrlKey || e.metaKey || e.shiftKey)}
+                className={`flex w-full cursor-grab items-center gap-3 rounded-2xl border px-4 py-3 text-left font-black transition ${
+                  selectedLayerIds.includes(layer.id) || selectedLayerId === layer.id
+                    ? "border-[#4263FF] bg-[#EEF1FF] text-[#4263FF]"
+                    : "border-slate-100 bg-[#F8FAFC] text-slate-600 hover:bg-[#F6F7FF]"
+                }`}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleVisible(layer.id);
+                  }}
+                  className="text-lg"
+                >
+                  {layer.visible ? "👁" : "🚫"}
+                </button>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xs shadow-sm">
+                  {layer.type === "photo" ? `#${layer.photoIndex}` : "PNG"}
+                </div>
+
+                <span className="min-w-0 flex-1 truncate">
+                  {layer.name}
+                  {layer.type === "photo" ? ` #${layer.photoIndex}` : ""}
+                </span>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleLock(layer.id);
+                  }}
+                  className="text-lg"
+                >
+                  {layer.locked ? "🔒" : "🔓"}
+                </button>
               </div>
-            )}
+            ))}
           </div>
-        </div>
+
+          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 p-5">
+            <button onClick={sendBackward} className="h-11 rounded-full bg-[#F6F7FF] font-black text-slate-600">SEND BACK</button>
+            <button onClick={bringForward} className="h-11 rounded-full bg-[#F6F7FF] font-black text-slate-600">BRING FRONT</button>
+          </div>
+        </section>
       </div>
     </div>
   );
