@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { redis, type BoothSession } from "@/lib/sessionStore";
 
+type BoothSessionWithMirror = BoothSession & {
+  mirror?: boolean;
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -11,6 +15,7 @@ export async function POST(request: Request) {
       gif = "",
       liveFrameVideo = "",
       livePhotos = [],
+      mirror = false,
       localSessionId = "",
       uploadStatus = {
         frame: Boolean(framePhoto),
@@ -22,13 +27,14 @@ export async function POST(request: Request) {
 
     const sessionId = localSessionId || `MIORI-${Date.now()}`;
 
-    const session: BoothSession = {
+    const session: BoothSessionWithMirror = {
       sessionId,
       framePhoto,
       singlePhotos,
       gif,
       liveFrameVideo,
       livePhotos,
+      mirror,
       uploadStatus,
       createdAt: new Date().toISOString(),
     };
