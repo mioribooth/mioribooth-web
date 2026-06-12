@@ -34,9 +34,11 @@ export type BoothSession = {
   gif?: string;
   liveFrameVideo?: string;
   livePhotos: string[];
+  mirror?: boolean;
   uploadStatus?: {
     frame?: boolean;
     live?: boolean;
+    livePhotos?: boolean;
     gif?: boolean;
     single?: boolean;
   };
