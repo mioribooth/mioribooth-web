@@ -170,12 +170,10 @@ export default function DownloadGallery({
     initialUploadStatus || {}
   );
 
-  const mirroredSinglePhotos = useMemo(
-    () => singlePhotos.map((photo) => getMirrorSafeUrl(photo, mirror)),
-    [singlePhotos, mirror]
+  const mirroredFramePhoto = useMemo(
+    () => getMirrorSafeUrl(framePhoto, mirror),
+    [framePhoto, mirror]
   );
-
-  const mirroredGif = useMemo(() => getMirrorSafeUrl(gif, mirror), [gif, mirror]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -250,9 +248,15 @@ export default function DownloadGallery({
         {framePhoto ? (
           <>
             <img
-              src={framePhoto}
+              src={mirroredFramePhoto}
               alt="Frame Photo"
               className="mx-auto max-h-[76vh] w-full rounded-[22px] object-contain sm:max-h-[760px] sm:rounded-[28px]"
+              style={{
+                transform:
+                  mirror && mirroredFramePhoto === framePhoto
+                    ? "scaleX(-1)"
+                    : "scaleX(1)",
+              }}
             />
 
             <DownloadButton
@@ -271,10 +275,8 @@ export default function DownloadGallery({
   function renderSinglePhotos() {
     const selectedOriginalPhoto =
       singlePhotos[activeSingleIndex] || singlePhotos[0] || "";
-    const selectedPhoto =
-      mirroredSinglePhotos[activeSingleIndex] || mirroredSinglePhotos[0] || "";
 
-    if (!selectedPhoto) {
+    if (!selectedOriginalPhoto) {
       return <LoadingCard text="Single photo sedang diproses..." />;
     }
 
@@ -291,14 +293,11 @@ export default function DownloadGallery({
       <div className="space-y-5">
         <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
           <img
-            src={selectedPhoto}
+            src={selectedOriginalPhoto}
             alt={`Single Photo ${activeSingleIndex + 1}`}
             className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[640px] sm:rounded-[28px]"
             style={{
-              transform:
-                mirror && selectedPhoto === selectedOriginalPhoto
-                  ? "scaleX(-1)"
-                  : "scaleX(1)",
+              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
             }}
           />
 
@@ -350,11 +349,11 @@ export default function DownloadGallery({
     return (
       <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
         <img
-          src={mirroredGif}
+          src={gif}
           alt="GIF"
           className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[560px] sm:rounded-[28px]"
           style={{
-            transform: mirror && mirroredGif === gif ? "scaleX(-1)" : "scaleX(1)",
+            transform: mirror ? "scaleX(-1)" : "scaleX(1)",
           }}
         />
 
@@ -369,52 +368,24 @@ export default function DownloadGallery({
   }
 
   function renderLive() {
-    if (liveFrameVideo) {
+    const finalLiveVideo =
+      liveFrameVideo && liveFrameVideo.trim() !== "" ? liveFrameVideo : "";
+
+    if (finalLiveVideo) {
       return (
         <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
           <video
-            src={liveFrameVideo}
+            src={finalLiveVideo}
             controls
             playsInline
             className="mx-auto aspect-[2/3] max-h-[76vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[760px] sm:rounded-[28px]"
           />
 
           <DownloadButton
-            url={liveFrameVideo}
+            url={finalLiveVideo}
             label="Live-Photo"
             fallbackExtension="mp4"
           />
-        </div>
-      );
-    }
-
-    if (livePhotos.length > 0) {
-      return (
-        <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
-          {livePhotos.map((video, index) => (
-            <div
-              key={`${video}-${index}`}
-              className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl"
-            >
-              <video
-                src={video}
-                controls
-                playsInline
-                className="h-[280px] w-full rounded-[22px] bg-black object-cover"
-              />
-
-              <button
-                type="button"
-                onClick={() => {
-                  const ext = getFileExtension(video, "mp4");
-                  void forceDownload(video, `${sessionId}-Live-${index + 1}.${ext}`);
-                }}
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] text-sm font-black text-[#4263FF]"
-              >
-                Download Live {index + 1}
-              </button>
-            </div>
-          ))}
         </div>
       );
     }
