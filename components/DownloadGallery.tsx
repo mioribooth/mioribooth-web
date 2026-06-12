@@ -248,15 +248,10 @@ export default function DownloadGallery({
         {framePhoto ? (
           <>
             <img
-              src={mirroredFramePhoto}
+              src={framePhoto}
               alt="Frame Photo"
               className="mx-auto max-h-[76vh] w-full rounded-[22px] object-contain sm:max-h-[760px] sm:rounded-[28px]"
-              style={{
-                transform:
-                  mirror && mirroredFramePhoto === framePhoto
-                    ? "scaleX(-1)"
-                    : "scaleX(1)",
-              }}
+
             />
 
             <DownloadButton
@@ -297,7 +292,7 @@ export default function DownloadGallery({
             alt={`Single Photo ${activeSingleIndex + 1}`}
             className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[640px] sm:rounded-[28px]"
             style={{
-              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
+              transform: "scaleX(-1)",
             }}
           />
 
