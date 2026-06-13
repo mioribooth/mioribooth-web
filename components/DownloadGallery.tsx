@@ -292,7 +292,7 @@ export default function DownloadGallery({
             alt={`Single Photo ${activeSingleIndex + 1}`}
             className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[640px] sm:rounded-[28px]"
             style={{
-              transform: "scaleX(-1)",
+              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
             }}
           />
 
