@@ -8,7 +8,8 @@ const DOKU_BASE_URL =
 const DOKU_CLIENT_ID = process.env.DOKU_CLIENT_ID || "";
 const DOKU_SECRET_KEY = process.env.DOKU_SECRET_KEY || "";
 const DOKU_MERCHANT_ID = process.env.DOKU_MERCHANT_ID || "";
-const DOKU_TERMINAL_ID = process.env.DOKU_TERMINAL_ID || "A01";
+const DOKU_TERMINAL_ID =
+  process.env.DOKU_TERMINAL_ID || "";
 const DOKU_CHANNEL_ID = process.env.DOKU_CHANNEL_ID || "H2H";
 
 function getPrivateKey() {
@@ -130,19 +131,19 @@ export async function createDokuQris({
   const timestamp = getTimestamp();
   const pathUrl = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate";
 
-  const body = {
+const body = {
+  partnerReferenceNo: transactionId,
   merchantId: DOKU_MERCHANT_ID,
   terminalId: DOKU_TERMINAL_ID,
-  partnerReferenceNo: transactionId,
   amount: {
     value: `${amount}.00`,
     currency: "IDR",
-    },
-    validityPeriod: getTimestamp(5),
-    additionalInfo: {
-      callback: `${process.env.NEXT_PUBLIC_SITE_URL}/api/payments/qris/callback`,
-    },
-  };
+  },
+  validityPeriod: getTimestamp(5),
+  additionalInfo: {
+    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/api/payments/qris/callback`,
+  },
+};
 
   const bodyString = JSON.stringify(body);
 
