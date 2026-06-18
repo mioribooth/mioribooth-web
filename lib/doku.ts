@@ -181,3 +181,59 @@ const body = {
 
   return data;
 }
+
+export async function queryDokuQris({
+  originalPartnerReferenceNo,
+  originalReferenceNo,
+}: {
+  originalPartnerReferenceNo: string;
+  originalReferenceNo?: string;
+}) {
+  if (!DOKU_CLIENT_ID) throw new Error("DOKU_CLIENT_ID belum diisi.");
+  if (!DOKU_SECRET_KEY) throw new Error("DOKU_SECRET_KEY belum diisi.");
+  if (!DOKU_MERCHANT_ID) throw new Error("DOKU_MERCHANT_ID belum diisi.");
+
+  const accessToken = await getDokuAccessToken();
+  const timestamp = getTimestamp();
+  const pathUrl = "/snap-adapter/b2b/v1.0/qr/qr-mpm-query";
+
+  const body = {
+    originalReferenceNo: originalReferenceNo || originalPartnerReferenceNo,
+    originalPartnerReferenceNo,
+    serviceCode: "47",
+    merchantId: DOKU_MERCHANT_ID,
+  };
+
+  const bodyString = JSON.stringify(body);
+
+  const signature = createSymmetricSignature({
+    method: "POST",
+    path: pathUrl,
+    accessToken,
+    body: bodyString,
+    timestamp,
+  });
+
+  const response = await fetch(`${DOKU_BASE_URL}${pathUrl}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-TIMESTAMP": timestamp,
+      "X-PARTNER-ID": DOKU_CLIENT_ID,
+      "X-EXTERNAL-ID": generateExternalId(),
+      "CHANNEL-ID": DOKU_CHANNEL_ID,
+      "X-SIGNATURE": signature,
+    },
+    body: bodyString,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("DOKU_QRIS_QUERY_ERROR:", JSON.stringify(data, null, 2));
+    throw new Error(JSON.stringify(data));
+  }
+
+  return data;
+}
