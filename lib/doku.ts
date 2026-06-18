@@ -8,8 +8,7 @@ const DOKU_BASE_URL =
 const DOKU_CLIENT_ID = process.env.DOKU_CLIENT_ID || "";
 const DOKU_SECRET_KEY = process.env.DOKU_SECRET_KEY || "";
 const DOKU_MERCHANT_ID = process.env.DOKU_MERCHANT_ID || "";
-const DOKU_TERMINAL_ID =
-  process.env.DOKU_TERMINAL_ID || "";
+const DOKU_TERMINAL_ID = process.env.DOKU_TERMINAL_ID || "";
 const DOKU_CHANNEL_ID = process.env.DOKU_CHANNEL_ID || "H2H";
 
 function getPrivateKey() {
@@ -141,8 +140,9 @@ const body = {
   },
   validityPeriod: getTimestamp(5),
   additionalInfo: {
-    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/api/payments/qris/callback`,
-  },
+  postalCode: "77212",
+  feeType: "1",
+},
 };
 
   const bodyString = JSON.stringify(body);

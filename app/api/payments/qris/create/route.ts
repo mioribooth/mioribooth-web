@@ -1,35 +1,40 @@
-import { NextResponse } from "next/server";
 import { createDokuQris } from "@/lib/doku";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
 
-    const amount = Number(body.amount || 25000);
+    const amount = Number(body.amount || 0);
     const transactionId =
-      String(body.transactionId || "").trim() || `MIORI-${Date.now()}`;
+      typeof body.transactionId === "string" && body.transactionId.trim()
+        ? body.transactionId.trim()
+        : `MIORI-${Date.now()}`;
 
-    const qris = await createDokuQris({
+    if (!amount || amount <= 0) {
+      return Response.json(
+        {
+          success: false,
+          error: "Amount tidak valid.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const data = await createDokuQris({
       amount,
       transactionId,
     });
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
       transactionId,
-      qris,
-      qrContent: qris.qrContent,
-      referenceNo: qris.referenceNo,
-      partnerReferenceNo: qris.partnerReferenceNo,
+      data,
     });
-  } catch (error) {
-    console.error("CREATE_QRIS_API_ERROR:", error);
-
-    return NextResponse.json(
+  } catch (err: any) {
+    return Response.json(
       {
         success: false,
-        message: "Gagal membuat QRIS.",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: err.message || "Gagal membuat QRIS.",
       },
       { status: 500 }
     );
