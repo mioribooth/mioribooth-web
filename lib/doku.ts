@@ -12,19 +12,22 @@ const DOKU_TERMINAL_ID = process.env.DOKU_TERMINAL_ID || "";
 const DOKU_CHANNEL_ID = process.env.DOKU_CHANNEL_ID || "H2H";
 
 function getPrivateKey() {
+  const envKey = process.env.DOKU_PRIVATE_KEY;
+
+  if (envKey) {
+    return envKey
+      .replace(/\\n/g, "\n")
+      .replace(/^["']|["']$/g, "")
+      .trim();
+  }
+
   const privateKeyPath = path.join(process.cwd(), "private", "private_key.pem");
 
   if (fs.existsSync(privateKeyPath)) {
-    return fs.readFileSync(privateKeyPath, "utf8");
+    return fs.readFileSync(privateKeyPath, "utf8").trim();
   }
 
-  const envKey = process.env.DOKU_PRIVATE_KEY;
-
-  if (!envKey) {
-    throw new Error("DOKU_PRIVATE_KEY tidak ditemukan.");
-  }
-
-  return envKey.replace(/\\n/g, "\n");
+  throw new Error("DOKU_PRIVATE_KEY tidak ditemukan.");
 }
 
 function getTimestamp(addMinutes = 0) {
