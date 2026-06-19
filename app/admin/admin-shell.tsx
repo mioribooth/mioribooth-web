@@ -8,6 +8,7 @@ const menu = [
   ["fa-solid fa-credit-card", "Transaction", "/admin/transaction"],
   ["fa-solid fa-users", "User Management", "/admin/users"],
   ["fa-solid fa-ticket", "Voucher", "/admin/vouchers"],
+  ["fa-solid fa-book", "Pembukuan", "/admin/bookkeeping"],
   ["fa-solid fa-layer-group", "Template", "/admin/template"],
   ["fa-solid fa-images", "Gallery", "/admin/gallery"],
   ["fa-solid fa-chart-pie", "Report Analytic", "/admin/report"],
@@ -18,6 +19,7 @@ function getPageTitle(pathname: string) {
   if (pathname.includes("transaction")) return "Transaction";
   if (pathname.includes("users")) return "User Management";
   if (pathname.includes("vouchers")) return "Voucher Management";
+  if (pathname.includes("bookkeeping")) return "Pembukuan";
   if (pathname.includes("template")) return "Template";
   if (pathname.includes("gallery")) return "Gallery";
   if (pathname.includes("report")) return "Report Analytic";

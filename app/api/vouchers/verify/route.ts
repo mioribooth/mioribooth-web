@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveRevenueTransaction } from "@/lib/revenueStore";
+import { saveBookkeepingTransaction } from "@/lib/bookkeeping";
 
 const PACKAGE_PRICE = 25000;
 const EXTRA_PRINT_PRICE = 5000;
@@ -77,14 +78,26 @@ export async function POST(request: Request) {
       },
     });
 
+    const transactionId = `TRX-${Date.now()}`;
+
     await saveRevenueTransaction({
-      transactionId: `TRX-${Date.now()}`,
+      transactionId,
       paymentMethod: "VOUCHER",
       voucherCode: updatedVoucher.code,
       packageName: updatedVoucher.packageName,
       extraPrint,
       amount: totalAmount,
       paidAt: new Date().toISOString(),
+    });
+
+    await saveBookkeepingTransaction({
+      type: "INCOME",
+      source: "AUTO",
+      category: "Voucher",
+      method: "VOUCHER",
+      amount: totalAmount,
+      description: `${updatedVoucher.packageName} - Voucher ${updatedVoucher.code}`,
+      sessionId: transactionId,
     });
 
     return NextResponse.json({

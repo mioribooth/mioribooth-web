@@ -81,3 +81,24 @@ model FrameLayer {
 
   @@index([frameId])
 }
+
+model BookkeepingTransaction {
+  id          String   @id @default(cuid())
+  type        String   // INCOME | EXPENSE
+  source      String   @default("MANUAL") // AUTO | MANUAL
+  category    String
+  method      String?  // CASH | QRIS | TRANSFER | VOUCHER | OTHER
+  amount      Int
+  description String?
+  sessionId   String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([source])
+  @@index([category])
+  @@index([method])
+  @@index([sessionId])
+  @@index([createdAt])
+}

@@ -1,4 +1,6 @@
 import { queryDokuQris } from "@/lib/doku";
+import { prisma } from "@/lib/prisma";
+import { saveBookkeepingTransaction } from "@/lib/bookkeeping";
 
 function isPaidStatus(data: any) {
   const status =
@@ -50,9 +52,43 @@ export async function POST(request: Request) {
       originalReferenceNo: referenceNo || partnerReferenceNo,
     });
 
+    const paid = isPaidStatus(data);
+
+    if (paid) {
+      const amountFromBody = Number(body.amount || body.totalAmount || 0);
+      const amountFromResponse = Number(
+        data?.amount?.value || data?.paidAmount?.value || data?.totalAmount || 0
+      );
+      const amount = amountFromBody || amountFromResponse;
+
+      if (amount > 0) {
+        const existing = await prisma.bookkeepingTransaction.findFirst({
+          where: {
+            source: "AUTO",
+            method: "QRIS",
+            sessionId: partnerReferenceNo,
+          },
+        });
+
+        if (!existing) {
+          await saveBookkeepingTransaction({
+            type: "INCOME",
+            source: "AUTO",
+            category: body.category ? String(body.category) : "Photobooth",
+            method: "QRIS",
+            amount,
+            description: body.packageName
+              ? `${body.packageName}${body.extraPrint ? ` - Extra print ${body.extraPrint}` : ""}`
+              : "Pembayaran QRIS photobooth",
+            sessionId: partnerReferenceNo,
+          });
+        }
+      }
+    }
+
     return Response.json({
       success: true,
-      paid: isPaidStatus(data),
+      paid,
       data,
     });
   } catch (err: any) {
