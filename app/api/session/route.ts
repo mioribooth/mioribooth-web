@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       liveFrameVideo = "",
       livePhotos = [],
       localSessionId = "",
+      sessionId: bodySessionId = "",
       uploadStatus = {
         frame: Boolean(framePhoto),
         live: false,
@@ -36,18 +37,23 @@ export async function POST(request: Request) {
       },
     } = body;
 
-    const sessionId = localSessionId || `MIORI-${Date.now()}`;
+    const sessionId = localSessionId || bodySessionId || `MIORI-${Date.now()}`;
+    const existing = await redis.get<BoothSessionWithMirror>(`session:${sessionId}`);
 
     const session: BoothSessionWithMirror = {
+      ...(existing || {}),
       sessionId,
-      framePhoto,
-      singlePhotos,
-      gif,
-      liveFrameVideo,
-      livePhotos,
+      framePhoto: framePhoto || existing?.framePhoto || "",
+      singlePhotos: singlePhotos.length > 0 ? singlePhotos : existing?.singlePhotos || [],
+      gif: gif || existing?.gif || "",
+      liveFrameVideo: liveFrameVideo || existing?.liveFrameVideo || "",
+      livePhotos: livePhotos.length > 0 ? livePhotos : existing?.livePhotos || [],
       mirror: readMirrorValue(body),
-      uploadStatus,
-      createdAt: new Date().toISOString(),
+      uploadStatus: {
+        ...(existing?.uploadStatus || {}),
+        ...uploadStatus,
+      },
+      createdAt: existing?.createdAt || new Date().toISOString(),
     };
 
     await redis.set(`session:${sessionId}`, session);

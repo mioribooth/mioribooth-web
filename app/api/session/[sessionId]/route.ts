@@ -77,46 +77,53 @@ export async function PATCH(
     const sessionKey = `session:${sessionId}`;
     const existing = await redis.get<BoothSessionWithMirror>(sessionKey);
 
-    if (!existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Session tidak ditemukan.",
-        },
-        { status: 404 }
-      );
-    }
+    const baseSession: BoothSessionWithMirror = existing || {
+      sessionId,
+      framePhoto: "",
+      singlePhotos: [],
+      gif: "",
+      liveFrameVideo: "",
+      livePhotos: [],
+      mirror: readMirrorValue(body),
+      uploadStatus: {},
+      createdAt: new Date().toISOString(),
+    };
 
     const updatedSession: BoothSessionWithMirror = {
-      ...existing,
+      ...baseSession,
 
       framePhoto:
-        body.framePhoto !== undefined ? body.framePhoto : existing.framePhoto,
+        body.framePhoto !== undefined ? body.framePhoto : baseSession.framePhoto,
 
       singlePhotos:
         body.singlePhotos !== undefined
           ? body.singlePhotos
-          : existing.singlePhotos,
+          : baseSession.singlePhotos,
 
-      gif: body.gif !== undefined ? body.gif : existing.gif,
+      gif: body.gif !== undefined ? body.gif : baseSession.gif,
 
       liveFrameVideo:
         body.liveFrameVideo !== undefined
           ? body.liveFrameVideo
-          : existing.liveFrameVideo,
+          : baseSession.liveFrameVideo,
 
       livePhotos:
-        body.livePhotos !== undefined ? body.livePhotos : existing.livePhotos,
+        body.livePhotos !== undefined ? body.livePhotos : baseSession.livePhotos,
 
-      mirror: readMirrorValue(body, existing.mirror) ?? existing.mirror,
+      mirror: readMirrorValue(body, baseSession.mirror) ?? baseSession.mirror,
 
       uploadStatus: {
-        ...existing.uploadStatus,
+        ...baseSession.uploadStatus,
         ...(body.uploadStatus || {}),
       },
     };
 
     await redis.set(sessionKey, updatedSession);
+
+    await redis.zadd("gallery:sessions", {
+      score: Date.now(),
+      member: sessionId,
+    });
 
     return NextResponse.json({
       success: true,
