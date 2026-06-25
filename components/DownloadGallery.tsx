@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type ViewMode = "frame" | "single" | "gif" | "live";
 
@@ -9,6 +9,7 @@ type UploadStatus = {
   live?: boolean;
   gif?: boolean;
   single?: boolean;
+  singles?: boolean;
 };
 
 type DownloadGalleryProps = {
@@ -151,55 +152,20 @@ export default function DownloadGallery({
   singlePhotos: initialSinglePhotos = [],
   gif: initialGif,
   liveFrameVideo: initialLiveFrameVideo,
-  livePhotos: initialLivePhotos = [],
   mirror: initialMirror = false,
-  uploadStatus: initialUploadStatus,
 }: DownloadGalleryProps) {
   const [mode, setMode] = useState<ViewMode>("frame");
   const [activeSingleIndex, setActiveSingleIndex] = useState(0);
 
-  const [framePhoto, setFramePhoto] = useState(initialFramePhoto || "");
-  const [singlePhotos, setSinglePhotos] = useState(initialSinglePhotos);
-  const [gif, setGif] = useState(initialGif || "");
-  const [liveFrameVideo, setLiveFrameVideo] = useState(
-    initialLiveFrameVideo || ""
-  );
-  const [livePhotos, setLivePhotos] = useState(initialLivePhotos);
-  const [mirror, setMirror] = useState(Boolean(initialMirror));
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(
-    initialUploadStatus || {}
-  );
+  const framePhoto = initialFramePhoto || "";
+  const singlePhotos = initialSinglePhotos || [];
+  const gif = initialGif || "";
+  const liveFrameVideo = initialLiveFrameVideo || "";
+  const mirror = Boolean(initialMirror);
 
-  const mirroredFramePhoto = useMemo(
-    () => getMirrorSafeUrl(framePhoto, mirror),
-    [framePhoto, mirror]
-  );
-
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/session/${sessionId}`, {
-          cache: "no-store",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data?.session) return;
-
-        setFramePhoto(data.session.framePhoto || "");
-        setSinglePhotos(data.session.singlePhotos || []);
-        setGif(data.session.gif || "");
-        setLiveFrameVideo(data.session.liveFrameVideo || "");
-        setLivePhotos(data.session.livePhotos || []);
-        setMirror(Boolean(data.session.mirror));
-        setUploadStatus(data.session.uploadStatus || {});
-      } catch {
-        // ignore polling errors
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [sessionId]);
+  const selectedOriginalPhoto = useMemo(() => {
+    return singlePhotos[activeSingleIndex] || singlePhotos[0] || "";
+  }, [singlePhotos, activeSingleIndex]);
 
   function LoadingCard({ text }: { text: string }) {
     return (
@@ -211,7 +177,7 @@ export default function DownloadGallery({
           {text}
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-400">
-          Jangan tutup halaman ini dulu ya.
+          Coba refresh halaman jika file belum muncul.
         </p>
       </div>
     );
@@ -242,6 +208,16 @@ export default function DownloadGallery({
     );
   }
 
+  async function downloadAllSingles() {
+    for (let index = 0; index < singlePhotos.length; index += 1) {
+      const photo = singlePhotos[index];
+      const ext = getFileExtension(photo, "jpg");
+
+      await forceDownload(photo, `${sessionId}-Foto-${index + 1}.${ext}`, mirror);
+      await new Promise((resolve) => window.setTimeout(resolve, 450));
+    }
+  }
+
   function renderFramePhoto() {
     return (
       <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
@@ -251,7 +227,6 @@ export default function DownloadGallery({
               src={framePhoto}
               alt="Frame Photo"
               className="mx-auto max-h-[76vh] w-full rounded-[22px] object-contain sm:max-h-[760px] sm:rounded-[28px]"
-
             />
 
             <DownloadButton
@@ -261,27 +236,15 @@ export default function DownloadGallery({
             />
           </>
         ) : (
-          <LoadingCard text="Frame photo sedang diproses..." />
+          <LoadingCard text="Frame photo belum tersedia..." />
         )}
       </div>
     );
   }
 
   function renderSinglePhotos() {
-    const selectedOriginalPhoto =
-      singlePhotos[activeSingleIndex] || singlePhotos[0] || "";
-
     if (!selectedOriginalPhoto) {
-      return <LoadingCard text="Single photo sedang diproses..." />;
-    }
-
-    async function downloadAllSingles() {
-      for (let index = 0; index < singlePhotos.length; index += 1) {
-        const photo = singlePhotos[index];
-        const ext = getFileExtension(photo, "jpg");
-        await forceDownload(photo, `${sessionId}-Foto-${index + 1}.${ext}`, mirror);
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
-      }
+      return <LoadingCard text="Single photo belum tersedia..." />;
     }
 
     return (
@@ -338,7 +301,7 @@ export default function DownloadGallery({
 
   function renderGif() {
     if (!gif) {
-      return <LoadingCard text="GIF sedang diproses..." />;
+      return <LoadingCard text="GIF belum tersedia..." />;
     }
 
     return (
@@ -363,29 +326,26 @@ export default function DownloadGallery({
   }
 
   function renderLive() {
-    const finalLiveVideo =
-      liveFrameVideo && liveFrameVideo.trim() !== "" ? liveFrameVideo : "";
-
-    if (finalLiveVideo) {
-      return (
-        <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
-          <video
-            src={finalLiveVideo}
-            controls
-            playsInline
-            className="mx-auto aspect-[2/3] max-h-[76vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[760px] sm:rounded-[28px]"
-          />
-
-          <DownloadButton
-            url={finalLiveVideo}
-            label="Live-Photo"
-            fallbackExtension="mp4"
-          />
-        </div>
-      );
+    if (!liveFrameVideo) {
+      return <LoadingCard text="Live Photo MP4 belum tersedia..." />;
     }
 
-    return <LoadingCard text="Live Photo MP4 sedang diproses..." />;
+    return (
+      <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
+        <video
+          src={liveFrameVideo}
+          controls
+          playsInline
+          className="mx-auto aspect-[2/3] max-h-[76vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[760px] sm:rounded-[28px]"
+        />
+
+        <DownloadButton
+          url={liveFrameVideo}
+          label="Live-Photo"
+          fallbackExtension="mp4"
+        />
+      </div>
+    );
   }
 
   return (

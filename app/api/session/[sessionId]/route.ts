@@ -5,17 +5,19 @@ type BoothSessionWithMirror = BoothSession & {
   mirror?: boolean;
 };
 
-function readMirrorValue(body: Record<string, any>, fallback?: boolean) {
-  if (
-    body.mirror === undefined &&
-    body.isMirror === undefined &&
-    body.isMirrored === undefined &&
-    body.mirrorEnabled === undefined &&
-    body.cameraMirror === undefined &&
-    body.filterSettings?.mirror === undefined
-  ) {
-    return fallback;
-  }
+function hasMirrorField(body: Record<string, any>) {
+  return (
+    body.mirror !== undefined ||
+    body.isMirror !== undefined ||
+    body.isMirrored !== undefined ||
+    body.mirrorEnabled !== undefined ||
+    body.cameraMirror !== undefined ||
+    body.filterSettings?.mirror !== undefined
+  );
+}
+
+function readMirrorValue(body: Record<string, any>, fallback = false) {
+  if (!hasMirrorField(body)) return fallback;
 
   return Boolean(
     body.mirror ??
@@ -24,8 +26,18 @@ function readMirrorValue(body: Record<string, any>, fallback?: boolean) {
       body.mirrorEnabled ??
       body.cameraMirror ??
       body.filterSettings?.mirror ??
-      fallback ??
-      false
+      fallback
+  );
+}
+
+function normalizeStringArray(value: unknown, fallback: string[] = []) {
+  if (value === undefined) return fallback;
+  if (value === null) return [];
+
+  if (!Array.isArray(value)) return fallback;
+
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== ""
   );
 }
 
@@ -84,36 +96,52 @@ export async function PATCH(
       gif: "",
       liveFrameVideo: "",
       livePhotos: [],
-      mirror: readMirrorValue(body),
+      mirror: false,
       uploadStatus: {},
       createdAt: new Date().toISOString(),
     };
 
+    const framePhoto =
+      body.framePhoto === undefined
+        ? baseSession.framePhoto
+        : body.framePhoto === null
+          ? ""
+          : String(body.framePhoto || "");
+
+    const singlePhotos = normalizeStringArray(
+      body.singlePhotos,
+      baseSession.singlePhotos || []
+    );
+
+    const gif =
+      body.gif === undefined
+        ? baseSession.gif
+        : body.gif === null
+          ? ""
+          : String(body.gif || "");
+
+    const liveFrameVideo =
+      body.liveFrameVideo === undefined
+        ? baseSession.liveFrameVideo
+        : body.liveFrameVideo === null
+          ? ""
+          : String(body.liveFrameVideo || "");
+
     const updatedSession: BoothSessionWithMirror = {
       ...baseSession,
-
-      framePhoto:
-        body.framePhoto !== undefined ? body.framePhoto : baseSession.framePhoto,
-
-      singlePhotos:
-        body.singlePhotos !== undefined
-          ? body.singlePhotos
-          : baseSession.singlePhotos,
-
-      gif: body.gif !== undefined ? body.gif : baseSession.gif,
-
-      liveFrameVideo:
-        body.liveFrameVideo !== undefined
-          ? body.liveFrameVideo
-          : baseSession.liveFrameVideo,
-
-      livePhotos:
-        body.livePhotos !== undefined ? body.livePhotos : baseSession.livePhotos,
-
-      mirror: readMirrorValue(body, baseSession.mirror) ?? baseSession.mirror,
-
+      framePhoto,
+      singlePhotos,
+      gif,
+      liveFrameVideo,
+      livePhotos: [],
+      mirror: readMirrorValue(body, baseSession.mirror || false),
       uploadStatus: {
-        ...baseSession.uploadStatus,
+        ...(baseSession.uploadStatus || {}),
+        frame: Boolean(framePhoto),
+        single: singlePhotos.length > 0,
+        singles: singlePhotos.length > 0,
+        gif: Boolean(gif),
+        live: Boolean(liveFrameVideo),
         ...(body.uploadStatus || {}),
       },
     };

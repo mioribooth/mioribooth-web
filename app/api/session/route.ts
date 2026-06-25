@@ -5,7 +5,7 @@ type BoothSessionWithMirror = BoothSession & {
   mirror?: boolean;
 };
 
-function readMirrorValue(body: Record<string, any>) {
+function readMirrorValue(body: Record<string, any>, fallback = false) {
   return Boolean(
     body.mirror ??
       body.isMirror ??
@@ -13,45 +13,51 @@ function readMirrorValue(body: Record<string, any>) {
       body.mirrorEnabled ??
       body.cameraMirror ??
       body.filterSettings?.mirror ??
-      false
+      fallback
   );
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim() !== "");
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const {
-      framePhoto = "",
-      singlePhotos = [],
-      gif = "",
-      liveFrameVideo = "",
-      livePhotos = [],
-      localSessionId = "",
-      sessionId: bodySessionId = "",
-      uploadStatus = {
-        frame: Boolean(framePhoto),
-        live: false,
-        gif: false,
-        single: false,
-      },
-    } = body;
+    const sessionId =
+      body.localSessionId ||
+      body.sessionId ||
+      `MIORI-${Date.now()}`;
 
-    const sessionId = localSessionId || bodySessionId || `MIORI-${Date.now()}`;
     const existing = await redis.get<BoothSessionWithMirror>(`session:${sessionId}`);
+
+    const framePhoto = typeof body.framePhoto === "string" ? body.framePhoto : existing?.framePhoto || "";
+    const singlePhotos = normalizeStringArray(body.singlePhotos).length > 0
+      ? normalizeStringArray(body.singlePhotos)
+      : existing?.singlePhotos || [];
+    const gif = typeof body.gif === "string" ? body.gif : existing?.gif || "";
+    const liveFrameVideo = typeof body.liveFrameVideo === "string"
+      ? body.liveFrameVideo
+      : existing?.liveFrameVideo || "";
 
     const session: BoothSessionWithMirror = {
       ...(existing || {}),
       sessionId,
-      framePhoto: framePhoto || existing?.framePhoto || "",
-      singlePhotos: singlePhotos.length > 0 ? singlePhotos : existing?.singlePhotos || [],
-      gif: gif || existing?.gif || "",
-      liveFrameVideo: liveFrameVideo || existing?.liveFrameVideo || "",
-      livePhotos: livePhotos.length > 0 ? livePhotos : existing?.livePhotos || [],
-      mirror: readMirrorValue(body),
+      framePhoto,
+      singlePhotos,
+      gif,
+      liveFrameVideo,
+      livePhotos: [],
+      mirror: readMirrorValue(body, existing?.mirror || false),
       uploadStatus: {
-        ...(existing?.uploadStatus || {}),
-        ...uploadStatus,
+        frame: Boolean(framePhoto),
+        single: singlePhotos.length > 0,
+        singles: singlePhotos.length > 0,
+        gif: Boolean(gif),
+        live: Boolean(liveFrameVideo),
+        ...(body.uploadStatus || {}),
       },
       createdAt: existing?.createdAt || new Date().toISOString(),
     };
