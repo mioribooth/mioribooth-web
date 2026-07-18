@@ -32,6 +32,12 @@ function getFileExtension(url: string, fallback: string) {
   }
 }
 
+function isVideoUrl(url: string) {
+  if (!url) return false;
+  const ext = getFileExtension(url, "").toLowerCase();
+  return ["mp4", "webm", "mov", "m4v"].includes(ext);
+}
+
 function getMirroredCloudinaryUrl(url: string) {
   if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
     return url;
@@ -103,7 +109,12 @@ async function forceDownload(url: string, filename: string, mirror = false) {
     const finalUrl = getMirrorSafeUrl(url, mirror);
     let blob: Blob;
 
-    if (mirror && finalUrl === url && !url.toLowerCase().includes(".gif")) {
+    if (
+      mirror &&
+      finalUrl === url &&
+      !url.toLowerCase().includes(".gif") &&
+      !isVideoUrl(url)
+    ) {
       blob = await mirrorImageBlob(url);
     } else {
       const response = await fetch(finalUrl, {
@@ -275,15 +286,6 @@ export default function DownloadGallery({
       return <LoadingCard text="Single photo sedang diproses..." />;
     }
 
-    async function downloadAllSingles() {
-      for (let index = 0; index < singlePhotos.length; index += 1) {
-        const photo = singlePhotos[index];
-        const ext = getFileExtension(photo, "jpg");
-        await forceDownload(photo, `${sessionId}-Foto-${index + 1}.${ext}`, mirror);
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
-      }
-    }
-
     return (
       <div className="space-y-5">
         <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
@@ -302,16 +304,6 @@ export default function DownloadGallery({
             fallbackExtension="jpg"
             shouldMirror={mirror}
           />
-
-          {singlePhotos.length > 1 && (
-            <button
-              type="button"
-              onClick={() => void downloadAllSingles()}
-              className="mt-3 flex h-14 w-full items-center justify-center rounded-2xl bg-[#F6F7FF] px-4 text-sm font-black text-[#4263FF] transition active:scale-[0.98]"
-            >
-              Download Semua Singles
-            </button>
-          )}
         </div>
 
         {singlePhotos.length > 1 && (
@@ -341,21 +333,38 @@ export default function DownloadGallery({
       return <LoadingCard text="GIF sedang diproses..." />;
     }
 
+    const gifIsVideo = isVideoUrl(gif);
+
     return (
       <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
-        <img
-          src={gif}
-          alt="GIF"
-          className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[560px] sm:rounded-[28px]"
-          style={{
-            transform: mirror ? "scaleX(-1)" : "scaleX(1)",
-          }}
-        />
+        {gifIsVideo ? (
+          <video
+            src={gif}
+            autoPlay
+            loop
+            muted
+            playsInline
+            controls
+            className="mx-auto max-h-[68vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[560px] sm:rounded-[28px]"
+            style={{
+              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
+            }}
+          />
+        ) : (
+          <img
+            src={gif}
+            alt="GIF"
+            className="mx-auto max-h-[68vh] w-full rounded-[22px] object-contain sm:max-h-[560px] sm:rounded-[28px]"
+            style={{
+              transform: mirror ? "scaleX(-1)" : "scaleX(1)",
+            }}
+          />
+        )}
 
         <DownloadButton
           url={gif}
           label="GIF"
-          fallbackExtension="gif"
+          fallbackExtension={gifIsVideo ? "mp4" : "gif"}
           shouldMirror={mirror}
         />
       </div>
