@@ -156,159 +156,6 @@ async function forceDownload(url: string, filename: string, mirror = false) {
   }
 }
 
-type SlideshowStatus = "idle" | "loading" | "ready" | "error";
-
-function useSlideshowVideo({
-  photos,
-  mirror,
-  frameDurationMs = 500,
-  totalDurationMs = 6000,
-  enabled,
-}: {
-  photos: string[];
-  mirror: boolean;
-  frameDurationMs?: number;
-  totalDurationMs?: number;
-  enabled: boolean;
-}) {
-  const [videoUrl, setVideoUrl] = useState("");
-  const [videoType, setVideoType] = useState("video/webm");
-  const [status, setStatus] = useState<SlideshowStatus>("idle");
-  const photosKey = photos.join("|");
-
-  useEffect(() => {
-    if (!enabled || photos.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    let objectUrl = "";
-
-    async function build() {
-      setStatus("loading");
-
-      try {
-        const images = await Promise.all(
-          photos.map(
-            (src) =>
-              new Promise<HTMLImageElement>((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error("Gagal memuat foto"));
-                img.src = src;
-              })
-          )
-        );
-
-        if (cancelled) return;
-
-        const width = images[0].naturalWidth || images[0].width || 720;
-        const height = images[0].naturalHeight || images[0].height || 1080;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Canvas tidak tersedia");
-
-        const drawFrame = (img: HTMLImageElement) => {
-          ctx.save();
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          if (mirror) {
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-          }
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          ctx.restore();
-        };
-
-        // Gambar frame pertama dulu supaya stream tidak kosong saat mulai rekam
-        drawFrame(images[0]);
-
-        const stream = (canvas as HTMLCanvasElement & {
-          captureStream: (fps?: number) => MediaStream;
-        }).captureStream(0);
-        const videoTrack = stream.getVideoTracks()[0] as MediaStreamTrack & {
-          requestFrame?: () => void;
-        };
-
-        const mimeCandidates = [
-          "video/mp4;codecs=avc1",
-          "video/mp4",
-          "video/webm;codecs=vp9",
-          "video/webm;codecs=vp8",
-          "video/webm",
-        ];
-        const mimeType =
-          mimeCandidates.find(
-            (type) =>
-              typeof MediaRecorder !== "undefined" &&
-              MediaRecorder.isTypeSupported(type)
-          ) || "";
-
-        if (typeof MediaRecorder === "undefined") {
-          throw new Error("MediaRecorder tidak didukung browser ini");
-        }
-
-        const recorder = new MediaRecorder(
-          stream,
-          mimeType ? { mimeType } : undefined
-        );
-
-        const chunks: BlobPart[] = [];
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) chunks.push(event.data);
-        };
-
-        const stopped = new Promise<void>((resolve) => {
-          recorder.onstop = () => resolve();
-        });
-
-        recorder.start();
-
-        const frameCount = Math.max(
-          1,
-          Math.round(totalDurationMs / frameDurationMs)
-        );
-
-        for (let i = 0; i < frameCount; i++) {
-          if (cancelled) break;
-          const img = images[i % images.length];
-          drawFrame(img);
-          videoTrack.requestFrame?.();
-          await new Promise((resolve) => window.setTimeout(resolve, frameDurationMs));
-        }
-
-        recorder.stop();
-        await stopped;
-        stream.getTracks().forEach((track) => track.stop());
-
-        if (cancelled) return;
-
-        const finalType = mimeType ? mimeType.split(";")[0] : "video/webm";
-        const blob = new Blob(chunks, { type: finalType });
-        objectUrl = URL.createObjectURL(blob);
-        setVideoUrl(objectUrl);
-        setVideoType(finalType);
-        setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    }
-
-    build();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, photosKey, mirror, frameDurationMs, totalDurationMs]);
-
-  return { videoUrl, videoType, status };
-}
-
 export default function DownloadGallery({
   sessionId,
   framePhoto: initialFramePhoto,
@@ -338,26 +185,6 @@ export default function DownloadGallery({
     () => getMirrorSafeUrl(framePhoto, mirror),
     [framePhoto, mirror]
   );
-
-  // Slideshow (mp4/webm) dibuat dari singlePhotos, tiap foto tampil 500ms
-  // selama total 6 detik — cuma mulai dibuat begitu tab GIF pertama kali dibuka.
-  const [gifRequested, setGifRequested] = useState(false);
-
-  useEffect(() => {
-    if (mode === "gif") setGifRequested(true);
-  }, [mode]);
-
-  const {
-    videoUrl: slideshowUrl,
-    videoType: slideshowType,
-    status: slideshowStatus,
-  } = useSlideshowVideo({
-    photos: singlePhotos,
-    mirror,
-    frameDurationMs: 500,
-    totalDurationMs: 6000,
-    enabled: gifRequested,
-  });
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -501,7 +328,7 @@ export default function DownloadGallery({
     );
   }
 
-  function renderLegacyGif() {
+  function renderGif() {
     if (!gif) {
       return <LoadingCard text="GIF sedang diproses..." />;
     }
@@ -540,53 +367,6 @@ export default function DownloadGallery({
           fallbackExtension={gifIsVideo ? "mp4" : "gif"}
           shouldMirror={mirror}
         />
-      </div>
-    );
-  }
-
-  function renderGif() {
-    // Kalau belum ada single photos, pakai GIF lama dari backend (kalau ada)
-    if (singlePhotos.length === 0) {
-      return renderLegacyGif();
-    }
-
-    if (slideshowStatus === "error") {
-      return renderLegacyGif();
-    }
-
-    if (slideshowStatus !== "ready" || !slideshowUrl) {
-      return <LoadingCard text="Slideshow sedang dibuat..." />;
-    }
-
-    const ext = slideshowType.includes("mp4") ? "mp4" : "webm";
-
-    return (
-      <div className="overflow-hidden rounded-[28px] bg-white p-3 shadow-xl sm:rounded-[34px] sm:p-5">
-        <video
-          src={slideshowUrl}
-          autoPlay
-          loop
-          muted
-          playsInline
-          controls
-          className="mx-auto max-h-[68vh] w-full rounded-[22px] bg-black object-contain sm:max-h-[560px] sm:rounded-[28px]"
-        />
-
-        <button
-          type="button"
-          onClick={() => {
-            const anchor = document.createElement("a");
-            anchor.href = slideshowUrl;
-            anchor.download = `${sessionId}-GIF.${ext}`;
-            anchor.style.display = "none";
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-          }}
-          className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#4263FF] to-[#FF7BC3] px-4 text-sm font-black text-white shadow-lg transition active:scale-[0.98]"
-        >
-          Download GIF
-        </button>
       </div>
     );
   }
