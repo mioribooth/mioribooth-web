@@ -1116,10 +1116,10 @@ export default function EditFramePage() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#EAEDF5] p-8">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#EAEDF5] p-8">
             <div
               ref={frameRef}
-              className="relative h-full max-h-[calc(100vh-170px)] aspect-[2/3] overflow-hidden bg-white shadow-2xl"
+              className="relative mx-auto aspect-[2/3] w-full max-h-[calc(100vh-170px)] max-w-full overflow-hidden bg-white shadow-2xl"
               style={{ backgroundColor }}
               onClick={() => {
                 setSelectedLayerId("");
