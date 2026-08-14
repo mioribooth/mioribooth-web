@@ -910,7 +910,14 @@ export default function EditFramePage() {
 
   function addCategory() {
     const next = newCategoryName.trim().toUpperCase();
-    if (!next || categories.includes(next)) return;
+    if (!next) return;
+
+    if (categories.includes(next)) {
+      alert(`Kategori "${next}" sudah ada.`);
+      setCategory(next);
+      setNewCategoryName("");
+      return;
+    }
 
     setCategories((prev) => [...prev, next]);
     setCategory(next);
@@ -1202,29 +1209,43 @@ export default function EditFramePage() {
               className="mt-5 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
             />
 
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-              <select
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  setIsDirty(true);
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setIsDirty(true);
+              }}
+              className="mt-3 h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+            >
+              {categories.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+              <input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCategory();
+                  }
                 }}
-                className="h-12 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+                placeholder="Nama kategori baru"
+                className="h-11 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
+              />
+              <button
+                onClick={addCategory}
+                disabled={!newCategoryName.trim()}
+                className="h-11 rounded-2xl bg-[#4263FF] px-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {categories.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-
-              <button onClick={addCategory} className="h-12 rounded-2xl bg-[#4263FF] px-4 font-black text-white">+</button>
+                + Tambah
+              </button>
             </div>
-
-            <input
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="Kategori baru"
-              className="mt-3 h-11 w-full rounded-2xl bg-[#F6F7FF] px-4 font-bold outline-none"
-            />
+            <p className="mt-1 text-xs font-semibold text-slate-400">
+              Ketik nama kategori baru lalu klik "+ Tambah" atau tekan Enter. Kategori akan tersimpan permanen setelah kamu klik SIMPAN FRAME.
+            </p>
 
             <select
               value={layoutType}
