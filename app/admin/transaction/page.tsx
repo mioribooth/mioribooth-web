@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 type BoothLogEntry = {
   id: string;
   time: string;
-  type: "session" | "extra_print" | "keychain" | "print_failed";
+  type: "session" | "extra_print" | "keychain" | "print_failed" | "session_adjust";
   sessionId: string;
   eventName: string;
   packageName: string;
@@ -19,6 +19,7 @@ type Summary = {
   sessions: number;
   qrisSessions: number;
   voucherSessions: number;
+  staticQrisSessions: number;
   extraPrintCopies: number;
   keychainCopies: number;
   sessionAmount: number;
@@ -44,6 +45,7 @@ const EMPTY_SUMMARY: Summary = {
   sessions: 0,
   qrisSessions: 0,
   voucherSessions: 0,
+  staticQrisSessions: 0,
   extraPrintCopies: 0,
   keychainCopies: 0,
   sessionAmount: 0,
@@ -58,6 +60,7 @@ const TYPE_LABEL: Record<BoothLogEntry["type"], string> = {
   extra_print: "Tambahan cetak",
   keychain: "Ganci",
   print_failed: "Cetak gagal",
+  session_adjust: "Koreksi harga",
 };
 
 const TYPE_STYLE: Record<BoothLogEntry["type"], string> = {
@@ -65,6 +68,7 @@ const TYPE_STYLE: Record<BoothLogEntry["type"], string> = {
   extra_print: "bg-violet-50 text-violet-600",
   keychain: "bg-pink-50 text-pink-600",
   print_failed: "bg-rose-50 text-rose-600",
+  session_adjust: "bg-amber-50 text-amber-700",
 };
 
 function formatRupiah(value: number) {
@@ -174,7 +178,8 @@ export default function AdminTransactionPage() {
     const lines: string[] = [
       `Rekap,${date}`,
       `Sesi,${summary.sessions}`,
-      `Sesi QRIS,${summary.qrisSessions}`,
+      `Sesi QRIS Statis,${summary.staticQrisSessions}`,
+      `Sesi QRIS aplikasi,${summary.qrisSessions}`,
       `Sesi Voucher,${summary.voucherSessions}`,
       `Tambahan cetak (lembar),${summary.extraPrintCopies}`,
       `Ganci (lembar),${summary.keychainCopies}`,
@@ -274,7 +279,15 @@ export default function AdminTransactionPage() {
         <StatCard
           label="JUMLAH SESI"
           value={summary.sessions}
-          caption={`QRIS ${summary.qrisSessions} · Voucher ${summary.voucherSessions}`}
+          caption={
+            [
+              summary.staticQrisSessions > 0 && `QRIS Statis ${summary.staticQrisSessions}`,
+              summary.qrisSessions > 0 && `QRIS aplikasi ${summary.qrisSessions}`,
+              summary.voucherSessions > 0 && `Voucher ${summary.voucherSessions}`,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "-"
+          }
         />
         <StatCard
           label="TAMBAHAN CETAK"
@@ -379,7 +392,9 @@ export default function AdminTransactionPage() {
                     <td className="p-5">
                       <span className={`rounded-full px-4 py-2 text-sm font-black ${TYPE_STYLE[e.type]}`}>
                         {TYPE_LABEL[e.type]}
-                        {e.type !== "session" && e.copies > 0 ? ` ×${e.copies}` : ""}
+                        {e.type !== "session" && e.type !== "session_adjust" && e.copies > 0
+                          ? ` ×${e.copies}`
+                          : ""}
                       </span>
                     </td>
                     <td className="p-5 font-semibold text-slate-600">

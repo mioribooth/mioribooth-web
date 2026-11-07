@@ -6,7 +6,14 @@ import { redis } from "@/lib/redis";
 //   boothlog:events    -> sorted set, score = waktu kejadian (ms), member = id
 // Id dibuat oleh aplikasi booth (GUID), jadi kirim ulang kejadian yang sama aman (tidak dobel).
 
-export const BOOTH_LOG_TYPES = ["session", "extra_print", "keychain", "print_failed"] as const;
+// session_adjust = koreksi harga sesi (harga khusus) dari operator, nilainya selisih dan bisa negatif.
+export const BOOTH_LOG_TYPES = [
+  "session",
+  "extra_print",
+  "keychain",
+  "print_failed",
+  "session_adjust",
+] as const;
 export type BoothLogType = (typeof BOOTH_LOG_TYPES)[number];
 
 export type BoothLogEntry = {
@@ -17,7 +24,7 @@ export type BoothLogEntry = {
   eventId: string;
   eventName: string;
   packageName: string;
-  payment: string; // QRIS | Voucher
+  payment: string; // QRIS (aplikasi) | QRIS Statis (di luar aplikasi) | Voucher
   copies: number;
   amount: number;
   note: string;
@@ -65,7 +72,8 @@ export function sanitizeBoothLogEntry(raw: any): BoothLogEntry | null {
     packageName: clampText(raw.package ?? raw.packageName, 120),
     payment: clampText(raw.payment, 20),
     copies: clampInt(raw.copies, 0, 999),
-    amount: clampInt(raw.amount, 0, 50_000_000),
+    // Hanya koreksi harga yang boleh negatif (selisih terhadap nilai sesi yang sudah tercatat).
+    amount: clampInt(raw.amount, type === "session_adjust" ? -50_000_000 : 0, 50_000_000),
     note: clampText(raw.note, 160),
   };
 }
@@ -126,6 +134,7 @@ export type BoothLogSummary = {
   sessions: number;
   qrisSessions: number;
   voucherSessions: number;
+  staticQrisSessions: number;
   extraPrintCopies: number;
   keychainCopies: number;
   sessionAmount: number;
@@ -140,18 +149,22 @@ export function summarizeBoothLog(entries: BoothLogEntry[]): BoothLogSummary {
   const sessions = entries.filter((e) => e.type === "session");
   const extra = entries.filter((e) => e.type === "extra_print");
   const keychain = entries.filter((e) => e.type === "keychain");
+  const adjusts = entries.filter((e) => e.type === "session_adjust");
 
   const sum = (list: BoothLogEntry[], key: "copies" | "amount") =>
     list.reduce((total, e) => total + e[key], 0);
 
-  const sessionAmount = sum(sessions, "amount");
+  // Pemasukan sesi = nilai sesi + koreksi harga khusus (selisih, bisa negatif).
+  const sessionAmount = sum(sessions, "amount") + sum(adjusts, "amount");
   const extraPrintAmount = sum(extra, "amount");
   const keychainAmount = sum(keychain, "amount");
 
   return {
     sessions: sessions.length,
-    qrisSessions: sessions.filter((e) => e.payment !== "Voucher").length,
+    qrisSessions: sessions.filter((e) => e.payment === "QRIS").length,
     voucherSessions: sessions.filter((e) => e.payment === "Voucher").length,
+    // QRIS statis fisik, dibayar di luar aplikasi (tidak diverifikasi aplikasi).
+    staticQrisSessions: sessions.filter((e) => e.payment !== "QRIS" && e.payment !== "Voucher").length,
     extraPrintCopies: sum(extra, "copies"),
     keychainCopies: sum(keychain, "copies"),
     sessionAmount,
