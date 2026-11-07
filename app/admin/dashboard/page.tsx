@@ -96,9 +96,34 @@ export default function AdminDashboardPage() {
     month: { income: 0, expense: 0, profit: 0 },
   });
   const [transactions, setTransactions] = useState<BookkeepingTransaction[]>([]);
+  const [boothToday, setBoothToday] = useState({
+    sessions: 0,
+    extraPrintCopies: 0,
+    keychainCopies: 0,
+  });
+
+  // Ringkasan log booth hari ini (sesi, tambahan cetak, ganci). Gagal memuat tidak
+  // boleh mengganggu dashboard pembukuan, jadi error-nya cukup dicatat di console.
+  async function loadBoothToday() {
+    try {
+      const response = await fetch("/api/admin/booth-log", { cache: "no-store" });
+      const data = await response.json();
+
+      if (data?.success) {
+        setBoothToday({
+          sessions: data.summary.sessions,
+          extraPrintCopies: data.summary.extraPrintCopies,
+          keychainCopies: data.summary.keychainCopies,
+        });
+      }
+    } catch (error) {
+      console.error("LOAD_DASHBOARD_BOOTH_LOG_ERROR:", error);
+    }
+  }
 
   async function loadDashboard() {
     setLoading(true);
+    loadBoothToday();
 
     try {
       const response = await fetch("/api/admin/bookkeeping", {
@@ -221,6 +246,30 @@ export default function AdminDashboardPage() {
           </button>
         </div>
       </div>
+
+      <Link
+        href="/admin/transaction"
+        className="mt-6 grid gap-6 rounded-[36px] bg-white p-7 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl md:grid-cols-3"
+      >
+        <div>
+          <p className="text-sm font-black text-slate-400">SESI HARI INI</p>
+          <h3 className="mt-2 text-5xl font-black">{boothToday.sessions}</h3>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-400">TAMBAHAN CETAK HARI INI</p>
+          <h3 className="mt-2 text-5xl font-black">
+            {boothToday.extraPrintCopies}
+            <span className="ml-2 text-lg font-black text-slate-400">lembar</span>
+          </h3>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-400">GANCI HARI INI</p>
+          <h3 className="mt-2 text-5xl font-black">
+            {boothToday.keychainCopies}
+            <span className="ml-2 text-lg font-black text-slate-400">lembar</span>
+          </h3>
+        </div>
+      </Link>
 
       <div className="mt-6 grid gap-6 md:grid-cols-3">
         <Link href="/admin/bookkeeping" className="rounded-[36px] bg-white p-7 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl">
